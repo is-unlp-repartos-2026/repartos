@@ -1,0 +1,7 @@
+"""Clase base de todos los modelos (tablas) de SQLAlchemy."""
+
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass

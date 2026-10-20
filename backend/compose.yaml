@@ -1,0 +1,27 @@
+# Base de datos PostgreSQL para desarrollo.
+# Levantar:  docker compose up -d     Apagar:  docker compose stop
+# Los valores se toman del archivo .env (si no existen, se usan los que están después de ":-").
+
+name: siger
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-siger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siger}
+      POSTGRES_DB: ${POSTGRES_DB:-siger}
+    ports:
+      # puerto_de_tu_máquina:puerto_dentro_del_contenedor
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Los datos se guardan en un volumen: sobreviven aunque se apague o se borre el contenedor.
+      - datos_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-siger} -d ${POSTGRES_DB:-siger}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  datos_postgres:

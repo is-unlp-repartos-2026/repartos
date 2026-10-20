@@ -1,13 +1,6 @@
 {
-<<<<<<< HEAD
-    "recommendations": [
-        "google.geminicodeassist"
-    ]
-}
-=======
   "recommendations": [
     "ms-python.python",
     "github.vscode-pull-request-github"
   ]
 }
->>>>>>> bb68b38272d333cd420afc32181f7beda0f03b62
