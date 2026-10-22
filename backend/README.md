@@ -24,7 +24,20 @@ cp .env.example .env              # configuración local (no se sube al repo)
 uv sync                           # crea el entorno e instala las dependencias
 docker compose up -d              # levanta PostgreSQL en segundo plano
 uv run alembic upgrade head       # crea las tablas en la base
+uv run python -m repartos.scripts.crear_operario   # crea la cuenta del operario (pide usuario y contraseña)
 ```
+
+En tu `.env`, reemplazá `SECRET_KEY` por una clave propia (es la que firma los tokens de sesión):
+
+```bash
+uv run python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+## Probar el login en /docs
+
+1. `POST /operario/login` → **Try it out** → usuario y contraseña del operario → **Execute** → copiá el `token`.
+2. Botón **Authorize** (arriba a la derecha) → pegá **solo** el token (sin la palabra `Bearer`) → **Authorize**.
+3. Los endpoints protegidos (con candado) ya se pueden usar. La sesión del operario vence a los 30 minutos.
 
 ## Día a día
 

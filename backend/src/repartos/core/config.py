@@ -15,5 +15,13 @@ class Settings(BaseSettings):
     # Dirección de la base: postgresql+psycopg://USUARIO:CLAVE@HOST:PUERTO/BASE
     database_url: str = "postgresql+psycopg://siger:siger@localhost:5432/siger"
 
+    # Clave para firmar los tokens (JWT). Quien la tenga puede fabricar tokens válidos:
+    # en producción tiene que ser larga, aleatoria y secreta.
+    secret_key: str = "clave-solo-para-desarrollo-cambiar-en-produccion"
+    algoritmo_token: str = "HS256"
+
+    # La sesión del operario vence a los 30 minutos (supuesto del equipo, HU-01).
+    minutos_token_operario: int = 30
+
 
 settings = Settings()
