@@ -2,10 +2,9 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from repartos.db.base import Base
-from repartos.models.repartidor import Repartidor
 
 
 class EstadoPedido(enum.StrEnum):
@@ -38,21 +37,14 @@ class Pedido(Base):
 
     estado: Mapped[EstadoPedido] = mapped_column(
         Enum(EstadoPedido, values_callable=lambda e: [x.value for x in e]),
-        default=EstadoPedido.REGISTRADO,
+        # Todo pedido nace "registrado"; el default lo pone la base (vale para los INSERT en SQL).
+        server_default=EstadoPedido.REGISTRADO.value,
     )
     repartidor_id: Mapped[int | None] = mapped_column(ForeignKey("repartidores.id"))
-    repartidor: Mapped[Repartidor | None] = relationship()
 
-    # Datos de cierre: confirmación de entrega (HU-20) o entrega fallida (HU-07).
+    # Datos de cierre: foto de la confirmación de entrega (HU-20) o motivo de la entrega fallida (HU-07).
     foto_entrega: Mapped[str | None] = mapped_column(String(255))
-    dni_entrega: Mapped[str | None] = mapped_column(String(10))
     motivo_fallo: Mapped[str | None] = mapped_column(String(200))
-
-    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    historial: Mapped[list["CambioEstado"]] = relationship(
-        back_populates="pedido", order_by="CambioEstado.fecha_hora"
-    )
 
 
 class CambioEstado(Base):
@@ -62,11 +54,11 @@ class CambioEstado(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pedido_id: Mapped[int] = mapped_column(ForeignKey("pedidos.id"))
+    # Repartidor que tenía el pedido en ese momento (puede ser ninguno, por ejemplo al registrarlo).
+    repartidor_id: Mapped[int | None] = mapped_column(ForeignKey("repartidores.id"))
     estado: Mapped[EstadoPedido] = mapped_column(
         Enum(EstadoPedido, values_callable=lambda e: [x.value for x in e])
     )
     fecha_hora: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Motivo o aclaración: cancelación, reasignación, rechazo, entrega fallida, etc.
     detalle: Mapped[str | None] = mapped_column(String(200))
-
-    pedido: Mapped[Pedido] = relationship(back_populates="historial")

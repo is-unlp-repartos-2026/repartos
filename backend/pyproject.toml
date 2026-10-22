@@ -24,8 +24,13 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.16.0",
     "pytest>=9.1.1",
 ]
 
 [tool.fastapi]
 entrypoint = "repartos.main:app"
+
+[tool.pytest.ini_options]
+# Dónde están los tests. Se corren desde backend/ con: uv run pytest
+testpaths = ["tests"]

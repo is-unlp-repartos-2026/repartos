@@ -61,6 +61,23 @@ uv run alembic upgrade head                                          # aplica la
 uv run alembic downgrade -1                                          # deshace la última
 ```
 
+## Tests
+
+```bash
+docker compose up -d              # los tests necesitan la base levantada
+uv run pytest                     # corre todos los tests
+uv run pytest -v                  # muestra cada test con su resultado
+uv run pytest tests/test_health.py   # corre solo un archivo
+```
+
+- Los tests usan una base aparte (`siger_test`), que se crea sola la primera vez y recibe las mismas
+  migraciones que la de desarrollo. Tu base de desarrollo no se toca.
+- Cada test arranca con la base vacía: lo que crea un test se deshace al terminar.
+- Fixtures disponibles (en `tests/conftest.py`):
+  - `cliente`: hace requests a la API, por ejemplo `cliente.post("/operario/repartidores", json={...})`.
+  - `db`: una sesión de la base de prueba, para preparar datos o verificar resultados con SQL.
+- Cada criterio de aceptación de una HU se escribe como un test.
+
 ## Dependencias
 
 ```bash
@@ -78,11 +95,19 @@ src/repartos/
 ├── main.py      arma la app y registra los routers
 ├── core/        configuración general (lee el .env)
 ├── db/          conexión a la base de datos
-├── models/      tablas de la base de datos
-├── schemas/     datos que entran y salen de la API
-├── services/    reglas de negocio de las historias de usuario
-└── routers/     endpoints, uno por interfaz (operario, repartidor, seguimiento)
+├── models/        estructura de las tablas (solo para que Alembic genere las migraciones)
+├── repositories/  consultas a la base, escritas en SQL (un archivo por tabla)
+├── schemas/       datos que entran y salen de la API
+├── services/      reglas de negocio de las historias de usuario
+└── routers/       endpoints, uno por interfaz (operario, repartidor, seguimiento)
 ```
 
-Regla: el router recibe el pedido y llama a un service; el service aplica las reglas y usa los models.
-Las reglas de negocio van solo en `services/`.
+Recorrido de una request: el router recibe el pedido y llama a un service; el service aplica las reglas
+de la HU y llama a los repositories; los repositories ejecutan el SQL.
+
+Reglas:
+
+- Las reglas de negocio van solo en `services/`.
+- El SQL va solo en `repositories/`. Los models no se usan para consultar.
+- Los valores del SQL siempre van como parámetros (`WHERE dni = :dni`), nunca armados con texto
+  (`f"WHERE dni = '{dni}'"`): armarlos con texto permite la inyección SQL.
