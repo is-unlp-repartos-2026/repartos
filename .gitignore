@@ -10,3 +10,5 @@ __pycache__/
 
 # Caches de herramientas
 .pytest_cache/
+
+frontend/node_moudules
