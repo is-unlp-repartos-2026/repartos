@@ -13,6 +13,14 @@ const soloTexto = (campo: string) =>
     .regex(/^[^\d]+$/, `${campo} no puede contener números.`)
     .max(100, `${campo} es demasiado largo.`);
 
+const alfanumerico = (campo: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `Completá ${campo}.`)
+    .regex(/^[\p{L}\d\s.,#°º\-/]+$/u, `${campo} solo puede tener letras y números.`)
+    .max(100, `${campo} es demasiado largo.`);
+
 const consultaSchema = z.object({
   nombre: soloTexto("el nombre y apellido"),
   empresa: soloTexto("la empresa o comercio"),
@@ -22,8 +30,8 @@ const consultaSchema = z.object({
     .min(1, "Completá el teléfono.")
     .regex(/^\d+$/, "El teléfono solo puede tener números.")
     .max(20, "El teléfono es demasiado largo."),
-  origen: soloTexto("el origen del envío"),
-  destino: soloTexto("el destino"),
+  origen: alfanumerico("el origen del envío"),
+  destino: alfanumerico("el destino"),
   detalle: z.string().trim().min(1, "Contanos qué necesitás enviar.").max(1000, "El detalle es demasiado largo."),
 });
 
