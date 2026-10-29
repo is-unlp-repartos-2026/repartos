@@ -196,3 +196,19 @@ def buscar_por_codigo_seguimiento(db: Session, codigo: str) -> RowMapping | None
         {"codigo": codigo},
     )
     return resultado.mappings().first()
+
+
+def buscar_detalle(db: Session, pedido_id: int) -> RowMapping | None:
+    """Todo el pedido para el operario (HU-23): datos, repartidor actual, foto y motivo de fallo."""
+    resultado = db.execute(
+        text(
+            "SELECT p.id, p.codigo_seguimiento, p.origen, p.destino, p.receptor_nombre, p.receptor_dni, "
+            "p.peso_kg, p.alto_cm, p.ancho_cm, p.largo_cm, p.estado, p.repartidor_id, "
+            "r.nombre AS repartidor_nombre, p.foto_entrega, p.motivo_fallo "
+            "FROM pedidos p "
+            "LEFT JOIN repartidores r ON r.id = p.repartidor_id "
+            "WHERE p.id = :id"
+        ),
+        {"id": pedido_id},
+    )
+    return resultado.mappings().first()

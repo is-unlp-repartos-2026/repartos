@@ -1,12 +1,13 @@
 """Endpoints de la interfaz del operario (todos empiezan con /operario)."""
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import FileResponse
 
 from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
-from repartos.schemas.pedidos import DatosNuevoPedido, EstadoActualizado, PedidoRegistrado
+from repartos.schemas.pedidos import DatosNuevoPedido, DetallePedidoOperario, EstadoActualizado, PedidoRegistrado
 from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
 from repartos.services import auth, pedidos, repartidores
 
@@ -63,3 +64,21 @@ def cancelar_pedido(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -
             status_code=status.HTTP_409_CONFLICT,
             detail="Solo se puede cancelar un pedido registrado o con repartidor asignado",
         )
+
+
+@router.get("/pedidos/{pedido_id}")
+def detalle_pedido(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -> DetallePedidoOperario:
+    """HU-23: el detalle completo de un pedido (desde el tablero o el historial)."""
+    try:
+        return pedidos.detalle_pedido(db, pedido_id)
+    except pedidos.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+
+
+@router.get("/pedidos/{pedido_id}/foto", response_class=FileResponse)
+def foto_entrega(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -> FileResponse:
+    """HU-23: la foto de la entrega de un pedido entregado. Solo el operario la puede ver."""
+    try:
+        return FileResponse(pedidos.ruta_foto(db, pedido_id))
+    except pedidos.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El pedido no tiene foto de entrega")

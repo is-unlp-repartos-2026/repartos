@@ -24,11 +24,17 @@ def insertar(
 
 
 def listar_de_pedido(db: Session, pedido_id: int) -> list[RowMapping]:
-    """El historial del pedido, del primer cambio al último."""
+    """El historial del pedido, del primer cambio al último, con el nombre del repartidor de cada cambio.
+
+    LEFT JOIN (y no JOIN): los cambios sin repartidor (por ejemplo, "registrado") también tienen que salir;
+    en esos, repartidor_nombre viene NULL.
+    """
     resultado = db.execute(
         text(
-            "SELECT estado, fecha_hora, repartidor_id, detalle FROM cambios_estado "
-            "WHERE pedido_id = :pedido_id ORDER BY fecha_hora, id"
+            "SELECT c.estado, c.fecha_hora, c.repartidor_id, r.nombre AS repartidor_nombre, c.detalle "
+            "FROM cambios_estado c "
+            "LEFT JOIN repartidores r ON r.id = c.repartidor_id "
+            "WHERE c.pedido_id = :pedido_id ORDER BY c.fecha_hora, c.id"
         ),
         {"pedido_id": pedido_id},
     )

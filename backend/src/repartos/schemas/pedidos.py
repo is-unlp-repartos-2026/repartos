@@ -106,3 +106,34 @@ class DetallePedidoAsignado(BaseModel):
     ancho_cm: float
     largo_cm: float
     estado: EstadoPedido
+
+
+class CambioDeEstadoOperario(BaseModel):
+    """Un cambio del historial, con todo el detalle (el operario ve quién y por qué)."""
+
+    estado: EstadoPedido
+    fecha_hora: datetime
+    repartidor: RepartidorDelPedido | None
+    detalle: str | None
+
+
+class DetallePedidoOperario(BaseModel):
+    """El detalle completo de un pedido para el operario (HU-23)."""
+
+    id: int
+    codigo_seguimiento: str
+    origen: str
+    destino: str
+    receptor_nombre: str
+    receptor_dni: str
+    peso_kg: float
+    alto_cm: float
+    ancho_cm: float
+    largo_cm: float
+    estado: EstadoPedido
+    repartidor: RepartidorDelPedido | None
+    historial: list[CambioDeEstadoOperario]
+    # Solo si está entregado: la dirección para ver la foto (GET /operario/pedidos/{id}/foto).
+    foto_url: str | None
+    # Solo si la entrega falló.
+    motivo_fallo: str | None

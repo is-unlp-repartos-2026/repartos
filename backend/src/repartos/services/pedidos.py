@@ -1,11 +1,21 @@
-"""Reglas de los pedidos del lado del operario (HU-04 Registrar pedido, HU-06 Cancelar pedido)."""
+"""Reglas de los pedidos del lado del operario (HU-04 Registrar, HU-06 Cancelar, HU-23 Consultar detalle)."""
+
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from repartos.core.config import settings
 from repartos.core.security import generar_codigo_seguimiento
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
-from repartos.schemas.pedidos import DatosNuevoPedido, EstadoActualizado, PedidoRegistrado, RepartidorDelPedido
+from repartos.schemas.pedidos import (
+    CambioDeEstadoOperario,
+    DatosNuevoPedido,
+    DetallePedidoOperario,
+    EstadoActualizado,
+    PedidoRegistrado,
+    RepartidorDelPedido,
+)
 from repartos.services import asignacion
 
 class PedidoNoEncontrado(Exception):
@@ -77,3 +87,41 @@ def cancelar_pedido(db: Session, pedido_id: int) -> EstadoActualizado:
     )
     db.commit()
     return EstadoActualizado(id=pedido_id, estado=EstadoPedido.CANCELADO)
+
+
+def _repartidor(repartidor_id: int | None, nombre: str | None) -> RepartidorDelPedido | None:
+    return RepartidorDelPedido(id=repartidor_id, nombre=nombre) if repartidor_id is not None else None
+
+
+def detalle_pedido(db: Session, pedido_id: int) -> DetallePedidoOperario:
+    """HU-23: datos, código, repartidor e historial; si se entregó, la foto; si falló, el motivo."""
+    pedido = pedidos.buscar_detalle(db, pedido_id)
+    if pedido is None:
+        raise PedidoNoEncontrado
+
+    historial = [
+        CambioDeEstadoOperario(
+            estado=c["estado"],
+            fecha_hora=c["fecha_hora"],
+            repartidor=_repartidor(c["repartidor_id"], c["repartidor_nombre"]),
+            detalle=c["detalle"],
+        )
+        for c in cambios_estado.listar_de_pedido(db, pedido_id)
+    ]
+    return DetallePedidoOperario(
+        **{k: v for k, v in pedido.items() if k not in ("repartidor_id", "repartidor_nombre", "foto_entrega")},
+        repartidor=_repartidor(pedido["repartidor_id"], pedido["repartidor_nombre"]),
+        historial=historial,
+        foto_url=f"/operario/pedidos/{pedido_id}/foto" if pedido["foto_entrega"] else None,
+    )
+
+
+def ruta_foto(db: Session, pedido_id: int) -> Path:
+    """El archivo de la foto de la entrega. PedidoNoEncontrado si el pedido no existe o no tiene foto."""
+    pedido = pedidos.buscar_detalle(db, pedido_id)
+    if pedido is None or not pedido["foto_entrega"]:
+        raise PedidoNoEncontrado
+    ruta = settings.carpeta_fotos / pedido["foto_entrega"]
+    if not ruta.is_file():
+        raise PedidoNoEncontrado
+    return ruta
