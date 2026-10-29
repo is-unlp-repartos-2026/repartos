@@ -22,3 +22,9 @@ class OperarioLogueado(BaseModel):
 
     id: int
     usuario: str
+
+
+class CodigoAccesoRepartidor(BaseModel):
+    """Lo que manda la app para iniciar sesión (body del POST /repartidor/login): solo el código."""
+
+    codigo: str

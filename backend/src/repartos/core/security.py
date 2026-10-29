@@ -6,6 +6,7 @@ Cuatro herramientas:
 3. Tokens: al iniciar sesión se fabrica un token firmado; en cada request se verifica.
 4. Dependencias para proteger endpoints: un endpoint que necesite al operario logueado pide
    Depends(obtener_id_operario_actual) y, si el token falta o no es válido, FastAPI responde 401.
+   Lo mismo para el repartidor con Depends(obtener_id_repartidor_actual).
 """
 
 import hashlib
@@ -19,6 +20,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 
 from repartos.core.config import settings
+from repartos.db.session import SesionDB
+from repartos.repositories import repartidores
 
 # --------------------------------------------------------------------------------------------
 # 1. Contraseñas
@@ -95,18 +98,44 @@ def _leer_token(token: str) -> dict:
 # respondemos nosotros con 401 (en lugar del 403 que daría FastAPI por defecto).
 _esquema_bearer = HTTPBearer(auto_error=False)
 
+REPARTIDOR_DESHABILITADO = "Estás deshabilitado. Consultá con el operario"
+
+
+def _leer_token_del_rol(credenciales: HTTPAuthorizationCredentials | None, rol: str) -> int:
+    """Verifica que haya token, que sea válido y que sea del rol pedido. Devuelve el id del usuario."""
+    if credenciales is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Falta iniciar sesión")
+    datos = _leer_token(credenciales.credentials)
+    if datos.get("rol") != rol:  # p. ej., un repartidor intentando usar un endpoint del operario
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Acción solo para el {rol}")
+    return int(datos["sub"])
+
 
 def obtener_id_operario_actual(
     credenciales: Annotated[HTTPAuthorizationCredentials | None, Depends(_esquema_bearer)],
 ) -> int:
-    """Dependencia: devuelve el id del operario logueado o corta la request con 401."""
-    if credenciales is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Falta iniciar sesión")
-    datos = _leer_token(credenciales.credentials)
-    if datos.get("rol") != "operario":  # p. ej., un repartidor intentando usar un endpoint del operario
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acción solo para el operario")
-    return int(datos["sub"])
+    """Dependencia: devuelve el id del operario logueado o corta la request con 401/403."""
+    return _leer_token_del_rol(credenciales, "operario")
 
 
-# Atajo para usar en los routers: `operario_id: OperarioActual`
+def obtener_id_repartidor_actual(
+    credenciales: Annotated[HTTPAuthorizationCredentials | None, Depends(_esquema_bearer)],
+    db: SesionDB,
+) -> int:
+    """Dependencia: devuelve el id del repartidor logueado o corta la request con 401/403.
+
+    Su token dura 30 días, así que en CADA request se revisa en la base que siga habilitado:
+    si el operario lo deshabilita (HU-12), pierde el acceso en ese momento y no cuando venza el token.
+    """
+    repartidor_id = _leer_token_del_rol(credenciales, "repartidor")
+    repartidor = repartidores.buscar_por_id(db, repartidor_id)
+    if repartidor is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida")
+    if not repartidor["habilitado"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REPARTIDOR_DESHABILITADO)
+    return repartidor_id
+
+
+# Atajos para usar en los routers: `operario_id: OperarioActual`, `repartidor_id: RepartidorActual`
 OperarioActual = Annotated[int, Depends(obtener_id_operario_actual)]
+RepartidorActual = Annotated[int, Depends(obtener_id_repartidor_actual)]

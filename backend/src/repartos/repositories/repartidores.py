@@ -9,6 +9,23 @@ _COLUMNAS = (
 )
 
 
+def buscar_por_id(db: Session, repartidor_id: int) -> RowMapping | None:
+    resultado = db.execute(
+        text(f"SELECT {_COLUMNAS} FROM repartidores WHERE id = :id"),
+        {"id": repartidor_id},
+    )
+    return resultado.mappings().first()
+
+
+def buscar_por_codigo_acceso_hash(db: Session, codigo_acceso_hash: str) -> RowMapping | None:
+    """Busca al dueño de un código de acceso por su hash (HU-02). Devuelve id y habilitado, o None."""
+    resultado = db.execute(
+        text("SELECT id, habilitado FROM repartidores WHERE codigo_acceso_hash = :hash"),
+        {"hash": codigo_acceso_hash},
+    )
+    return resultado.mappings().first()
+
+
 def existe_dni(db: Session, dni: str) -> bool:
     resultado = db.execute(
         # EXISTS corta en cuanto encuentra una fila: no hace falta traer los datos.

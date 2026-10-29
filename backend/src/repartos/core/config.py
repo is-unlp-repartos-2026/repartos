@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     # La sesión del operario vence a los 30 minutos (supuesto del equipo, HU-01).
     minutos_token_operario: int = 30
+    # La sesión del repartidor queda guardada en el celular (HU-02): dura 30 días.
+    # Si el operario lo deshabilita, pierde el acceso igual (se revisa en cada request).
+    minutos_token_repartidor: int = 60 * 24 * 30
 
 
 settings = Settings()
