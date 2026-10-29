@@ -118,13 +118,16 @@ function DriverPortal() {
           </div>
 
           <Dialog open={!!pedidoSeleccionado} onOpenChange={(open) => !open && setPedidoSeleccionado(null)}>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Detalle del pedido {pedidoSeleccionado?.guia}</DialogTitle>
-                <DialogDescription>Información de entrega y carga asignada.</DialogDescription>
-              </DialogHeader>
-              {pedidoSeleccionado && (
-                <dl className="shipment-details" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Detalle del pedido {pedidoSeleccionado?.guia}</DialogTitle>
+              <DialogDescription>
+                Información de entrega y carga asignada.
+              </DialogDescription>
+            </DialogHeader>
+            {pedidoSeleccionado && (
+              <div style={{ display: "grid", gap: 16, marginTop: 8 }}>
+                <dl className="shipment-details" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div><dt>Origen</dt><dd>{pedidoSeleccionado.origen}</dd></div>
                   <div><dt>Destino</dt><dd>{pedidoSeleccionado.destino}</dd></div>
                   <div><dt>Receptor</dt><dd>{pedidoSeleccionado.destinatario}</dd></div>
@@ -132,9 +135,46 @@ function DriverPortal() {
                   <div><dt>Peso</dt><dd>4.5 kg</dd></div>
                   <div><dt>Dimensiones</dt><dd>35 x 25 x 20 cm</dd></div>
                 </dl>
-              )}
-            </DialogContent>
-          </Dialog>
+
+                {/* Avanzar estado / Registrar entrega fallida */}
+                {pedidoSeleccionado.estado !== "Pendiente de aceptación" && (
+                  <div style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
+                      Actualizar estado del pedido
+                      <select
+                        id="select-estado-avance"
+                        defaultValue={pedidoSeleccionado.estado}
+                        style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #ccc" }}
+                      >
+                        <option value="En camino">En camino</option>
+                        <option value="Entregado">Entregado con éxito</option>
+                        <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
+                      Motivo de la falla (Obligatorio si la entrega es fallida)
+                      <textarea 
+                        rows={2} 
+                        placeholder="Ej: Destinatario ausente, dirección incorrecta..."
+                        style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
+                      />
+                    </label>
+
+                    <Button 
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setPedidoSeleccionado(null);
+                      }}
+                    >
+                      Guardar cambios
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
         </>
       )}
     </Shell>
