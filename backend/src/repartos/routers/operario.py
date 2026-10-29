@@ -9,9 +9,11 @@ from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
 from repartos.schemas.pedidos import (
     DatosNuevoPedido,
+    DatosReasignacion,
     DetallePedidoOperario,
     EstadoActualizado,
     PedidoRegistrado,
+    ResultadoReasignacion,
     Tablero,
 )
 from repartos.schemas.repartidores import DatosNuevoRepartidor, Repartidor, RepartidorRegistrado
@@ -106,3 +108,19 @@ def foto_entrega(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -> F
         return FileResponse(pedidos.ruta_foto(db, pedido_id))
     except pedidos.PedidoNoEncontrado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El pedido no tiene foto de entrega")
+
+
+@router.post("/pedidos/{pedido_id}/reasignar")
+def reasignar_pedido(
+    pedido_id: int, datos: DatosReasignacion, operario_id: OperarioActual, db: SesionDB
+) -> ResultadoReasignacion:
+    """HU-08: el operario le saca el pedido a su repartidor y se lo asigna a otro apto."""
+    try:
+        return pedidos.reasignar_pedido(db, pedido_id, datos)
+    except pedidos.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except pedidos.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se puede reasignar un pedido con repartidor asignado (todavía no retirado)",
+        )

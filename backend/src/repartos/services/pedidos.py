@@ -1,5 +1,5 @@
 """Reglas de los pedidos del lado del operario (HU-04 Registrar, HU-06 Cancelar, HU-23 Consultar detalle,
-HU-22 Monitorear pedidos en curso)."""
+HU-22 Monitorear pedidos en curso, HU-08 Reasignar pedido)."""
 
 from pathlib import Path
 
@@ -12,11 +12,13 @@ from repartos.repositories import cambios_estado, pedidos
 from repartos.schemas.pedidos import (
     CambioDeEstadoOperario,
     DatosNuevoPedido,
+    DatosReasignacion,
     DetallePedidoOperario,
     EstadoActualizado,
     PedidoEnTablero,
     PedidoRegistrado,
     RepartidorDelPedido,
+    ResultadoReasignacion,
     Tablero,
 )
 from repartos.services import asignacion
@@ -31,6 +33,10 @@ class EstadoNoPermitido(Exception):
 
 AVISO_SIN_REPARTIDOR = (
     "No hay ningún repartidor disponible que pueda llevar este pedido. "
+    "Quedó registrado y se asignará cuando haya uno."
+)
+AVISO_SIN_OTRO_REPARTIDOR = (
+    "No hay otro repartidor disponible que pueda llevar este pedido. "
     "Quedó registrado y se asignará cuando haya uno."
 )
 
@@ -152,4 +158,24 @@ def tablero(db: Session) -> Tablero:
         registrado=grupos[EstadoPedido.REGISTRADO],
         repartidor_asignado=grupos[EstadoPedido.REPARTIDOR_ASIGNADO],
         en_camino=grupos[EstadoPedido.EN_CAMINO],
+    )
+
+
+def reasignar_pedido(db: Session, pedido_id: int, datos: DatosReasignacion) -> ResultadoReasignacion:
+    """HU-08: solo en "repartidor asignado"; busca otro apto excluyendo al actual y guarda el motivo."""
+    pedido = pedidos.buscar_por_id_y_bloquear(db, pedido_id)
+    if pedido is None:
+        raise PedidoNoEncontrado
+    if pedido["estado"] != EstadoPedido.REPARTIDOR_ASIGNADO:
+        raise EstadoNoPermitido
+
+    nuevo = asignacion.reasignar(db, pedido, pedido["repartidor_id"], motivo=datos.motivo)
+    db.commit()
+
+    if nuevo is None:
+        return ResultadoReasignacion(
+            id=pedido_id, estado=EstadoPedido.REGISTRADO, repartidor=None, aviso=AVISO_SIN_OTRO_REPARTIDOR
+        )
+    return ResultadoReasignacion(
+        id=pedido_id, estado=EstadoPedido.REPARTIDOR_ASIGNADO, repartidor=RepartidorDelPedido(**nuevo)
     )

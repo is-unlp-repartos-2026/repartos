@@ -6,7 +6,7 @@ Por privacidad, el contenido del paquete NUNCA se pide ni se devuelve.
 import enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from repartos.models import EstadoPedido
 
@@ -159,3 +159,20 @@ class Tablero(BaseModel):
     registrado: list[PedidoEnTablero]
     repartidor_asignado: list[PedidoEnTablero]
     en_camino: list[PedidoEnTablero]
+
+
+class DatosReasignacion(BaseModel):
+    """Lo que manda el operario para reasignar un pedido (HU-08). El motivo es obligatorio."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)  # "   " cuenta como vacío
+
+    motivo: str = Field(min_length=1, max_length=150)
+
+
+class ResultadoReasignacion(BaseModel):
+    """A quién quedó asignado el pedido; si no había otro apto, vuelve a "registrado" con un aviso."""
+
+    id: int
+    estado: EstadoPedido
+    repartidor: RepartidorDelPedido | None
+    aviso: str | None = None
