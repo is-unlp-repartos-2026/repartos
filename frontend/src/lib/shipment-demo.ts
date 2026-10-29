@@ -51,4 +51,5 @@ export const DEMO_CHANNEL = "siger-demo-staff";
 export type DemoMessage =
   | { type: "request" }
   | { type: "sync"; tokens: DriverToken[]; shipments: Shipment[] }
-  | { type: "decide"; token: string; guia: string; estado: string };
+  | { type: "decide"; token: string; guia: string; estado: string }
+  | { type: "toggleDisponibilidad"; token: string };
