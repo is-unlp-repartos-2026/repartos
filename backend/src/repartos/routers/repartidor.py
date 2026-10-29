@@ -7,7 +7,7 @@ from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
 from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
-from repartos.schemas.pedidos import EstadoActualizado
+from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado
 from repartos.schemas.repartidores import Repartidor
 from repartos.services import auth, entregas, jornada
 
@@ -68,4 +68,20 @@ def retirar_pedido(pedido_id: int, repartidor_id: RepartidorActual, db: SesionDB
     except entregas.EstadoNoPermitido:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Solo se puede retirar un pedido con repartidor asignado"
+        )
+
+
+@router.post("/pedidos/{pedido_id}/entrega-fallida")
+def registrar_entrega_fallida(
+    pedido_id: int, datos: DatosEntregaFallida, repartidor_id: RepartidorActual, db: SesionDB
+) -> EstadoActualizado:
+    """HU-07: el repartidor no pudo entregar un pedido en camino; queda "entrega fallida" con el motivo."""
+    try:
+        return entregas.registrar_entrega_fallida(db, pedido_id, repartidor_id, datos)
+    except entregas.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except entregas.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se puede registrar una entrega fallida de un pedido en camino",
         )

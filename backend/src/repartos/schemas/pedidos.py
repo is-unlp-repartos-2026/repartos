@@ -3,7 +3,9 @@
 Por privacidad, el contenido del paquete NUNCA se pide ni se devuelve.
 """
 
-from pydantic import BaseModel, Field
+import enum
+
+from pydantic import BaseModel, Field, model_validator
 
 from repartos.models import EstadoPedido
 
@@ -49,3 +51,32 @@ class EstadoActualizado(BaseModel):
 
     id: int
     estado: EstadoPedido
+
+
+class MotivoFallo(enum.StrEnum):
+    """Motivos de entrega fallida (supuesto del equipo, validar con Martín)."""
+
+    DESTINATARIO_AUSENTE = "Destinatario ausente"
+    DIRECCION_INCORRECTA = "Dirección incorrecta"
+    PEDIDO_RECHAZADO = "Pedido rechazado"
+    OTRO = "Otro"
+
+
+class DatosEntregaFallida(BaseModel):
+    """Lo que manda la app al registrar una entrega fallida. El motivo es obligatorio (HU-07)."""
+
+    motivo: MotivoFallo  # solo acepta uno de los 4 valores; cualquier otro texto → 422
+    aclaracion: str | None = Field(default=None, max_length=150)
+
+    @model_validator(mode="after")
+    def otro_necesita_aclaracion(self) -> "DatosEntregaFallida":
+        """Si elige "Otro", tiene que escribir cuál fue el motivo."""
+        if self.motivo == MotivoFallo.OTRO and not (self.aclaracion and self.aclaracion.strip()):
+            raise ValueError('Con el motivo "Otro" hay que escribir una aclaración')
+        return self
+
+    def como_texto(self) -> str:
+        """El motivo tal como se guarda: "Dirección incorrecta" o "Otro: se rompió la moto"."""
+        if self.aclaracion and self.aclaracion.strip():
+            return f"{self.motivo}: {self.aclaracion.strip()}"
+        return str(self.motivo)

@@ -142,3 +142,10 @@ def cambiar_estado(db: Session, pedido_id: int, estado: EstadoPedido) -> None:
         text("UPDATE pedidos SET estado = :estado WHERE id = :id"),
         {"estado": estado, "id": pedido_id},
     )
+
+
+def registrar_entrega_fallida(db: Session, pedido_id: int, motivo: str) -> None:
+    db.execute(
+        text("UPDATE pedidos SET estado = :estado, motivo_fallo = :motivo WHERE id = :id"),
+        {"estado": EstadoPedido.ENTREGA_FALLIDA, "motivo": motivo, "id": pedido_id},
+    )
