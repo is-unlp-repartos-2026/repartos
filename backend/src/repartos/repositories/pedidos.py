@@ -63,3 +63,30 @@ def asignar_repartidor(db: Session, pedido_id: int, repartidor_id: int) -> None:
         text("UPDATE pedidos SET estado = :estado, repartidor_id = :repartidor_id WHERE id = :id"),
         {"estado": EstadoPedido.REPARTIDOR_ASIGNADO, "repartidor_id": repartidor_id, "id": pedido_id},
     )
+
+
+def buscar_registrados_que_puede_llevar_y_bloquear(
+    db: Session, peso_max_kg: float, alto_max_cm: float, ancho_max_cm: float, largo_max_cm: float
+) -> list[RowMapping]:
+    """Pedidos "registrado" sin repartidor que entran en esa capacidad, del más viejo al más nuevo (HU-13).
+
+    FOR UPDATE: si dos repartidores comienzan su jornada al mismo tiempo, el segundo espera a que el
+    primero termine; para entonces esos pedidos ya no están "registrado" y no se asignan dos veces.
+    """
+    resultado = db.execute(
+        text(
+            f"SELECT {_COLUMNAS} FROM pedidos "
+            "WHERE estado = :estado AND repartidor_id IS NULL "
+            "AND peso_kg <= :peso AND alto_cm <= :alto AND ancho_cm <= :ancho AND largo_cm <= :largo "
+            "ORDER BY id "
+            "FOR UPDATE"
+        ),
+        {
+            "estado": EstadoPedido.REGISTRADO,
+            "peso": peso_max_kg,
+            "alto": alto_max_cm,
+            "ancho": ancho_max_cm,
+            "largo": largo_max_cm,
+        },
+    )
+    return list(resultado.mappings())

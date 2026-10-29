@@ -136,3 +136,11 @@ def registrar_asignacion(db: Session, repartidor_id: int) -> None:
         text("UPDATE repartidores SET ultima_asignacion = clock_timestamp() WHERE id = :id"),
         {"id": repartidor_id},
     )
+
+
+def cambiar_activo(db: Session, repartidor_id: int, activo: bool) -> None:
+    """Comenzar (True) o terminar (False) la jornada laboral (HU-13, HU-14)."""
+    db.execute(
+        text("UPDATE repartidores SET activo = :activo WHERE id = :id"),
+        {"activo": activo, "id": repartidor_id},
+    )

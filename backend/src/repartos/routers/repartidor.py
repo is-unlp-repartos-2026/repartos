@@ -6,8 +6,9 @@ from repartos.core.security import REPARTIDOR_DESHABILITADO, RepartidorActual
 from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
+from repartos.schemas.jornada import JornadaComenzada
 from repartos.schemas.repartidores import Repartidor
-from repartos.services import auth
+from repartos.services import auth, jornada
 
 router = APIRouter(prefix="/repartidor", tags=["Repartidor"])
 
@@ -31,3 +32,12 @@ def consultar_sesion(repartidor_id: RepartidorActual, db: SesionDB) -> Repartido
     La app lo llama al abrirse: si responde 200, sigue logueado; si responde 401/403, vuelve al ingreso.
     """
     return Repartidor(**repartidores.buscar_por_id(db, repartidor_id))
+
+
+@router.post("/jornada/comenzar")
+def comenzar_jornada(repartidor_id: RepartidorActual, db: SesionDB) -> JornadaComenzada:
+    """HU-13: el repartidor comienza su jornada; queda activo y recibe los pedidos pendientes que puede llevar."""
+    try:
+        return jornada.comenzar_jornada(db, repartidor_id)
+    except jornada.JornadaYaComenzada:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya comenzaste tu jornada")
