@@ -7,6 +7,13 @@ import {
   DEMO_CHANNEL, demoLoginSchema, demoShipments, driverNameSchema, driverTokenSchema, generateDriverToken, shipmentSchema,
   type DemoMessage, type DriverToken, type Shipment, type ShipmentInput,
 } from "@/lib/shipment-demo";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 type Draft = ShipmentInput & { repartidor: string };
 const emptyShipment: Draft = { origen: "", destino: "", destinatario: "", telefono: "", detalle: "", repartidor: "" };
@@ -49,6 +56,7 @@ function DriverPortal() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [state, setState] = useState<{ tokens: DriverToken[]; shipments: Shipment[] } | null>(null);
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Shipment | null>(null);
   const post = useChannel((m) => { if (m.type === "sync") setState({ tokens: m.tokens, shipments: m.shipments }); });
 
   useEffect(() => {
@@ -69,26 +77,85 @@ function DriverPortal() {
   }
 
   const mine = token && state ? state.shipments.filter((s) => s.repartidor === token.token) : [];
-  return <Shell role="Repartidor" title={token ? `Hola, ${token.nombre}` : "Acceso de repartidor"} onLogout={token ? () => setToken(null) : undefined}>
-    {!token ? <form className="form staff-login" onSubmit={login} noValidate>
-      <h2>Ingresá tu token</h2>
-      <div className="fgrid"><label className="full">Token de 4 caracteres<input name="token" maxLength={4} autoComplete="off" style={{ textTransform: "uppercase", letterSpacing: "0.3em" }} required /></label></div>
-      {error && <p className="staff-error" role="alert">{error}</p>}
-      <Button className="btn btn-primary staff-submit" type="submit" disabled={!!pending}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
-    </form> : mine.length === 0 ? <p>No tenés envíos asignados por ahora.</p> : mine.map((s) => <article className="shipment-card" key={s.guia} style={{ marginBottom: 20 }}>
-      <div className="shipment-card-head"><h2><Truck />{s.guia}</h2><span className="staff-status" role="status">{s.estado}</span></div>
-      <dl className="shipment-details">
-        <div><dt>Origen</dt><dd>{s.origen}</dd></div>
-        <div><dt>Destino</dt><dd>{s.destino}</dd></div>
-        <div><dt>Destinatario</dt><dd>{s.destinatario}</dd></div>
-        <div><dt>Teléfono</dt><dd>{s.telefono}</dd></div>
-        <div className="detail-full"><dt>Detalles del pedido</dt><dd>{s.detalle}</dd></div>
-      </dl>
-      {s.estado === "Pendiente de aceptación" && <div className="staff-actions">
-        <Button className="btn btn-primary" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Aceptado" })}><Check />Aceptar pedido</Button>
-        <Button variant="outline" className="staff-secondary" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Rechazado" })}><X />Rechazar pedido</Button>
-      </div>}
-    </article>)}
+
+  return <Shell role="Repartidor" title={token ? "Mis entregas" : "Acceso de repartidor"} onLogout={token ? () => setToken(null) : undefined}>
+    {!token ? (
+      <form className="form staff-login" onSubmit={login} noValidate>
+        <h2>Ingresá tu token</h2>
+        <div className="fgrid">
+          <label className="full">Token de 4 caracteres
+            <input name="token" maxLength={4} autoComplete="off" style={{ textTransform: "uppercase", letterSpacing: "0.3em" }} required />
+          </label>
+        </div>
+        {error && <p className="staff-error" role="alert">{error}</p>}
+        <Button className="btn btn-primary staff-submit" type="submit" disabled={!!pending}>
+          {pending ? "Verificando…" : "Ingresar"}<ArrowRight />
+        </Button>
+      </form>
+    ) : (
+      <section aria-labelledby="mis-entregas-title">
+        <h2 id="mis-entregas-title" className="sr-only">Mis entregas</h2>
+        {mine.length === 0 ? (
+          <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
+            {mine.map((s) => (
+              <article
+                className="shipment-card"
+                key={s.guia}
+                style={{ cursor: "pointer", transition: "box-shadow 0.2s" }}
+                onClick={() => setPedidoSeleccionado(s)}
+              >
+                <div className="shipment-card-head">
+                  <h2><Truck />{s.guia}</h2>
+                  <span className="staff-status" role="status">{s.estado}</span>
+                </div>
+                <dl className="shipment-details">
+                  <div><dt>Origen</dt><dd>{s.origen}</dd></div>
+                  <div><dt>Destino</dt><dd>{s.destino}</dd></div>
+                </dl>
+                <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Button variant="outline" size="sm" onClick={() => setPedidoSeleccionado(s)}>
+                    Ver detalle
+                  </Button>
+                  {s.estado === "Pendiente de aceptación" && (
+                    <div className="staff-actions" onClick={(e) => e.stopPropagation()}>
+                      <Button className="btn btn-primary" size="sm" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Aceptado" })}>
+                        <Check />Aceptar
+                      </Button>
+                      <Button variant="outline" size="sm" className="staff-secondary" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Rechazado" })}>
+                        <X />Rechazar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <Dialog open={!!pedidoSeleccionado} onOpenChange={(open) => !open && setPedidoSeleccionado(null)}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Detalle del pedido {pedidoSeleccionado?.guia}</DialogTitle>
+              <DialogDescription>
+                Información de entrega y carga asignada.
+              </DialogDescription>
+            </DialogHeader>
+            {pedidoSeleccionado && (
+              <dl className="shipment-details" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+                <div><dt>Origen</dt><dd>{pedidoSeleccionado.origen}</dd></div>
+                <div><dt>Destino</dt><dd>{pedidoSeleccionado.destino}</dd></div>
+                <div><dt>Receptor</dt><dd>{pedidoSeleccionado.destinatario}</dd></div>
+                <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.telefono}</dd></div>
+                <div><dt>Peso</dt><dd>4.5 kg</dd></div>
+                <div><dt>Dimensiones</dt><dd>35 x 25 x 20 cm</dd></div>
+              </dl>
+            )}
+          </DialogContent>
+        </Dialog>
+      </section>
+    )}
   </Shell>;
 }
 
