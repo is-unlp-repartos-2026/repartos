@@ -2,7 +2,7 @@
 
 Cuatro herramientas:
 1. Contraseñas: se guarda solo su hash; para verificar, se hashea lo que escribió el usuario y se compara.
-2. Códigos de acceso del repartidor: los genera el sistema; también se guarda solo su hash.
+2. Códigos aleatorios: el de acceso del repartidor (se guarda solo su hash) y el de seguimiento.
 3. Tokens: al iniciar sesión se fabrica un token firmado; en cada request se verifica.
 4. Dependencias para proteger endpoints: un endpoint que necesite al operario logueado pide
    Depends(obtener_id_operario_actual) y, si el token falta o no es válido, FastAPI responde 401.
@@ -43,17 +43,32 @@ def verificar_contrasena(contrasena: str, hash_guardado: str) -> bool:
 
 
 # --------------------------------------------------------------------------------------------
-# 2. Códigos de acceso del repartidor
+# 2. Códigos aleatorios: de acceso del repartidor y de seguimiento del pedido
 # --------------------------------------------------------------------------------------------
 
-# Sin 0/O ni 1/I/L: el repartidor lo tipea en el celular y no tiene que confundirse.
+# Sin 0/O ni 1/I/L: se tipean en el celular y no tienen que confundirse.
 _ALFABETO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 LARGO_CODIGO_ACCESO = 8  # 31^8 ≈ 850 mil millones de códigos posibles
+LARGO_CODIGO_SEGUIMIENTO = 8
+
+
+def _generar_codigo(largo: int) -> str:
+    """`secrets` (no `random`): sus resultados son impredecibles, aptos para seguridad."""
+    return "".join(secrets.choice(_ALFABETO_CODIGO) for _ in range(largo))
 
 
 def generar_codigo_acceso() -> str:
-    """Código aleatorio para el repartidor. `secrets` (no `random`): es impredecible, apto para seguridad."""
-    return "".join(secrets.choice(_ALFABETO_CODIGO) for _ in range(LARGO_CODIGO_ACCESO))
+    """Código con el que el repartidor ingresa a la app (HU-02)."""
+    return _generar_codigo(LARGO_CODIGO_ACCESO)
+
+
+def generar_codigo_seguimiento() -> str:
+    """Código con el que el cliente final consulta su pedido (HU-21).
+
+    Es su único control de acceso: por eso es aleatorio y no un número correlativo (con 1, 2, 3...
+    cualquiera podría ver los pedidos de otros probando números).
+    """
+    return _generar_codigo(LARGO_CODIGO_SEGUIMIENTO)
 
 
 def hashear_codigo_acceso(codigo: str) -> str:

@@ -80,3 +80,59 @@ def insertar(
         },
     )
     return resultado.mappings().one()
+
+
+def buscar_apto_y_bloquear(
+    db: Session,
+    peso_kg: float,
+    alto_cm: float,
+    ancho_cm: float,
+    largo_cm: float,
+    excluir_id: int | None = None,
+) -> RowMapping | None:
+    """Regla de asignación (HU-04): el repartidor que puede llevar el pedido y hace más tiempo que no recibe uno.
+
+    - Apto: activo, habilitado y con peso y cada medida máxima mayores o iguales a las del pedido.
+    - excluir_id: para reasignar o rechazar (HU-08, HU-19), el repartidor actual no cuenta. Si es None,
+      la condición ":excluir_id IS NULL" es verdadera y no excluye a nadie.
+    - ORDER BY ultima_asignacion NULLS FIRST: primero los que nunca recibieron un pedido, después el que
+      lo recibió hace más tiempo. "id" desempata para que el resultado no dependa del azar.
+    - FOR UPDATE: bloquea la fila del elegido hasta el commit. Si al mismo tiempo ese repartidor intenta
+      terminar su jornada (o el operario lo deshabilita), ese UPDATE espera a que termine esta asignación,
+      y entonces ve el pedido nuevo y lo reasigna. Sin el bloqueo, el pedido podría quedar asignado a
+      alguien que ya se fue.
+    """
+    resultado = db.execute(
+        text(
+            "SELECT id, nombre FROM repartidores "
+            "WHERE activo AND habilitado "
+            "AND peso_max_kg >= :peso_kg "
+            "AND alto_max_cm >= :alto_cm AND ancho_max_cm >= :ancho_cm AND largo_max_cm >= :largo_cm "
+            # CAST: con None, PostgreSQL no puede deducir el tipo de :excluir_id y da error.
+            "AND (CAST(:excluir_id AS INTEGER) IS NULL OR id <> :excluir_id) "
+            "ORDER BY ultima_asignacion NULLS FIRST, id "
+            "LIMIT 1 "
+            "FOR UPDATE"
+        ),
+        {
+            "peso_kg": peso_kg,
+            "alto_cm": alto_cm,
+            "ancho_cm": ancho_cm,
+            "largo_cm": largo_cm,
+            "excluir_id": excluir_id,
+        },
+    )
+    return resultado.mappings().first()
+
+
+def registrar_asignacion(db: Session, repartidor_id: int) -> None:
+    """Anota cuándo recibió su último pedido (para el orden de la próxima asignación).
+
+    clock_timestamp() y no now(): now() es la hora en que EMPEZÓ la transacción, y una misma transacción
+    puede asignar varios pedidos seguidos (por ejemplo, al terminar una jornada). Con now() todos quedarían
+    con la misma hora y el orden "el que hace más tiempo que no recibe" no se respetaría.
+    """
+    db.execute(
+        text("UPDATE repartidores SET ultima_asignacion = clock_timestamp() WHERE id = :id"),
+        {"id": repartidor_id},
+    )

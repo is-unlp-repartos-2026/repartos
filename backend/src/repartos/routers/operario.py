@@ -6,8 +6,9 @@ from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
+from repartos.schemas.pedidos import DatosNuevoPedido, PedidoRegistrado
 from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
-from repartos.services import auth, repartidores
+from repartos.services import auth, pedidos, repartidores
 
 router = APIRouter(prefix="/operario", tags=["Operario"])
 
@@ -42,3 +43,9 @@ def registrar_repartidor(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un repartidor con ese DNI")
     except repartidores.CorreoRepetido:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un repartidor con ese correo")
+
+
+@router.post("/pedidos", status_code=status.HTTP_201_CREATED)
+def registrar_pedido(datos: DatosNuevoPedido, operario_id: OperarioActual, db: SesionDB) -> PedidoRegistrado:
+    """HU-04: el operario registra un pedido; se le asigna un repartidor apto si hay uno."""
+    return pedidos.registrar_pedido(db, datos)
