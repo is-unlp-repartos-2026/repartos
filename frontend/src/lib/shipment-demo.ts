@@ -14,13 +14,31 @@ export const shipmentSchema = z.object({
 });
 export type ShipmentInput = z.infer<typeof shipmentSchema>;
 export type Shipment = ShipmentInput & { guia: string; estado: string; repartidor?: string | undefined };
+
 export const demoShipments: Shipment[] = [
   { guia: "DEMO-001", origen: "Av. 1 y Calle 47, La Plata", destino: "Av. Corrientes 1200, CABA", destinatario: "Cliente de ejemplo", telefono: "1100001234", detalle: "2 cajas de artículos de librería. Entrega en recepción.", estado: "Pendiente de asignación" },
   { guia: "DEMO-002", origen: "Depósito de ejemplo, Rosario", destino: "Sucursal de ejemplo, Córdoba", destinatario: "Comercio de ejemplo", telefono: "1100005678", detalle: "3 bultos de indumentaria.", estado: "En tránsito" },
 ];
-export const driverTokenSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{4}$/, "El token tiene 4 letras o números.");
-export const driverNameSchema = z.string().trim().min(1, "Ingresá el nombre del repartidor.").max(100);
-export type DriverToken = { token: string; nombre: string };
+
+export const driverRegistrationSchema = z.object({
+  nombre: z.string().trim().min(1, "Ingresá el nombre.").max(100),
+  documento: z.string().trim().min(1, "Ingresá el documento.").max(20),
+  correo: z.string().email("Ingresá un correo válido.").max(100),
+  pesoMaxKg: z.coerce.number().min(1, "Ingresá el peso máximo."),
+  dimensionesMax: z.string().trim().min(1, "Ingresá las dimensiones.").max(100),
+});
+
+export type DriverToken = {
+  token: string;
+  nombre: string;
+  documento: string;
+  correo: string;
+  pesoMaxKg: number;
+  dimensionesMax: string;
+  habilitado: boolean;
+  activo: boolean;
+};
+
 const TOKEN_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export function generateDriverToken(existing: string[], random: () => number = Math.random): string {
   for (;;) {
@@ -28,7 +46,7 @@ export function generateDriverToken(existing: string[], random: () => number = M
     if (!existing.includes(t)) return t;
   }
 }
-/** Demo-only channel between the operario and repartidor tabs; state lives in the operario tab's React state. */
+
 export const DEMO_CHANNEL = "siger-demo-staff";
 export type DemoMessage =
   | { type: "request" }
