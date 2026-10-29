@@ -157,3 +157,20 @@ def cambiar_activo(db: Session, repartidor_id: int, activo: bool) -> None:
         text("UPDATE repartidores SET activo = :activo WHERE id = :id"),
         {"activo": activo, "id": repartidor_id},
     )
+
+
+def listar(db: Session, habilitado: bool | None = None) -> list[RowMapping]:
+    """Todos los repartidores, o solo los habilitados / deshabilitados (HU-10), por nombre.
+
+    Filtro opcional sin armar texto: si `habilitado` es None, la primera parte del OR es verdadera y no
+    filtra nada (mismo patrón que excluir_id en buscar_apto_y_bloquear).
+    """
+    resultado = db.execute(
+        text(
+            f"SELECT {_COLUMNAS} FROM repartidores "
+            "WHERE (CAST(:habilitado AS BOOLEAN) IS NULL OR habilitado = :habilitado) "
+            "ORDER BY nombre, id"
+        ),
+        {"habilitado": habilitado},
+    )
+    return list(resultado.mappings())

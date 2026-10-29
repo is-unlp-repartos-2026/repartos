@@ -1,10 +1,10 @@
-"""Reglas de los repartidores (HU-09 Registrar repartidor)."""
+"""Reglas de los repartidores (HU-09 Registrar repartidor, HU-10 Listar repartidores)."""
 
 from sqlalchemy.orm import Session
 
 from repartos.core.security import generar_codigo_acceso, hashear_codigo_acceso
 from repartos.repositories import repartidores
-from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
+from repartos.schemas.repartidores import DatosNuevoRepartidor, Repartidor, RepartidorRegistrado
 
 
 class DniRepetido(Exception):
@@ -38,3 +38,8 @@ def registrar_repartidor(db: Session, datos: DatosNuevoRepartidor) -> Repartidor
     db.commit()
 
     return RepartidorRegistrado(**fila, codigo_acceso=codigo)
+
+
+def listar_repartidores(db: Session, habilitado: bool | None = None) -> list[Repartidor]:
+    """HU-10: nombre, DNI, carga habilitada, habilitado/deshabilitado y activo/inactivo de cada repartidor."""
+    return [Repartidor(**fila) for fila in repartidores.listar(db, habilitado)]

@@ -14,7 +14,7 @@ from repartos.schemas.pedidos import (
     PedidoRegistrado,
     Tablero,
 )
-from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
+from repartos.schemas.repartidores import DatosNuevoRepartidor, Repartidor, RepartidorRegistrado
 from repartos.services import auth, pedidos, repartidores
 
 router = APIRouter(prefix="/operario", tags=["Operario"])
@@ -37,6 +37,14 @@ def consultar_sesion(operario_id: OperarioActual, db: SesionDB) -> OperarioLogue
     if operario is None:  # el token es válido, pero el operario ya no existe
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida")
     return OperarioLogueado(id=operario["id"], usuario=operario["usuario"])
+
+
+@router.get("/repartidores")
+def listar_repartidores(
+    operario_id: OperarioActual, db: SesionDB, habilitado: bool | None = None
+) -> list[Repartidor]:
+    """HU-10: lista los repartidores. ?habilitado=false muestra solo los deshabilitados (y true, los habilitados)."""
+    return repartidores.listar_repartidores(db, habilitado)
 
 
 @router.post("/repartidores", status_code=status.HTTP_201_CREATED)
