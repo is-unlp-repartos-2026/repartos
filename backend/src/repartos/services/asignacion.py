@@ -54,3 +54,18 @@ def reasignar(db: Session, pedido: RowMapping, excluir_repartidor_id: int, motiv
             db, pedido["id"], EstadoPedido.REGISTRADO, detalle=f"Sin otro repartidor apto: {motivo}"
         )
     return nuevo
+
+
+def reasignar_todos_los_de(db: Session, repartidor_id: int, motivo: str) -> tuple[int, int]:
+    """Reasigna todos los pedidos "repartidor asignado" de un repartidor (terminar jornada, deshabilitar).
+
+    Devuelve (cuántos pasaron a otro repartidor, cuántos volvieron a "registrado").
+    """
+    reasignados = 0
+    sin_repartidor = 0
+    for pedido in pedidos.buscar_asignados_a_y_bloquear(db, repartidor_id):
+        if reasignar(db, pedido, repartidor_id, motivo=motivo):
+            reasignados += 1
+        else:
+            sin_repartidor += 1
+    return reasignados, sin_repartidor

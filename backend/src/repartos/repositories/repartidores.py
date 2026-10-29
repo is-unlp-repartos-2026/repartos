@@ -17,7 +17,7 @@ def buscar_por_id(db: Session, repartidor_id: int) -> RowMapping | None:
     return resultado.mappings().first()
 
 
-def buscar_por_id_y_bloquear(db: Session, repartidor_id: int) -> RowMapping:
+def buscar_por_id_y_bloquear(db: Session, repartidor_id: int) -> RowMapping | None:
     """Como buscar_por_id, pero bloquea la fila hasta el commit (FOR UPDATE).
 
     Se usa antes de cambiar algo del repartidor que depende de sus pedidos (por ejemplo, terminar la
@@ -27,7 +27,7 @@ def buscar_por_id_y_bloquear(db: Session, repartidor_id: int) -> RowMapping:
         text(f"SELECT {_COLUMNAS} FROM repartidores WHERE id = :id FOR UPDATE"),
         {"id": repartidor_id},
     )
-    return resultado.mappings().one()
+    return resultado.mappings().first()
 
 
 def buscar_por_codigo_acceso_hash(db: Session, codigo_acceso_hash: str) -> RowMapping | None:
@@ -174,3 +174,11 @@ def listar(db: Session, habilitado: bool | None = None) -> list[RowMapping]:
         {"habilitado": habilitado},
     )
     return list(resultado.mappings())
+
+
+def cambiar_habilitado(db: Session, repartidor_id: int, habilitado: bool) -> None:
+    """Habilitar (True) o deshabilitar (False) al repartidor (HU-12). Nunca se borra: borrado lógico."""
+    db.execute(
+        text("UPDATE repartidores SET habilitado = :habilitado WHERE id = :id"),
+        {"habilitado": habilitado, "id": repartidor_id},
+    )

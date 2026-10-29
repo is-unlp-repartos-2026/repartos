@@ -16,7 +16,12 @@ from repartos.schemas.pedidos import (
     ResultadoReasignacion,
     Tablero,
 )
-from repartos.schemas.repartidores import DatosNuevoRepartidor, Repartidor, RepartidorRegistrado
+from repartos.schemas.repartidores import (
+    DatosNuevoRepartidor,
+    Repartidor,
+    RepartidorDeshabilitado,
+    RepartidorRegistrado,
+)
 from repartos.services import auth, pedidos, repartidores
 
 router = APIRouter(prefix="/operario", tags=["Operario"])
@@ -124,3 +129,30 @@ def reasignar_pedido(
             status_code=status.HTTP_409_CONFLICT,
             detail="Solo se puede reasignar un pedido con repartidor asignado (todavía no retirado)",
         )
+
+
+@router.post("/repartidores/{repartidor_id}/deshabilitar")
+def deshabilitar_repartidor(repartidor_id: int, operario_id: OperarioActual, db: SesionDB) -> RepartidorDeshabilitado:
+    """HU-12: deshabilita al repartidor y reasigna sus pedidos sin retirar."""
+    try:
+        return repartidores.deshabilitar(db, repartidor_id)
+    except repartidores.RepartidorNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repartidor no encontrado")
+    except repartidores.YaEstaEnEseEstado:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El repartidor ya está deshabilitado")
+    except repartidores.TienePedidosEnCamino:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El repartidor tiene pedidos en camino: no se puede deshabilitar hasta que termine esas entregas",
+        )
+
+
+@router.post("/repartidores/{repartidor_id}/habilitar")
+def habilitar_repartidor(repartidor_id: int, operario_id: OperarioActual, db: SesionDB) -> Repartidor:
+    """HU-12: vuelve a habilitar al repartidor; recupera el acceso a la app."""
+    try:
+        return repartidores.habilitar(db, repartidor_id)
+    except repartidores.RepartidorNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repartidor no encontrado")
+    except repartidores.YaEstaEnEseEstado:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El repartidor ya está habilitado")

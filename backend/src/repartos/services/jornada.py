@@ -58,13 +58,9 @@ def terminar_jornada(db: Session, repartidor_id: int) -> JornadaTerminada:
 
     repartidores.cambiar_activo(db, repartidor_id, False)
 
-    reasignados = 0
-    sin_repartidor = 0
-    for pedido in pedidos.buscar_asignados_a_y_bloquear(db, repartidor_id):
-        if asignacion.reasignar(db, pedido, repartidor_id, motivo="el repartidor terminó su jornada"):
-            reasignados += 1
-        else:
-            sin_repartidor += 1
+    reasignados, sin_repartidor = asignacion.reasignar_todos_los_de(
+        db, repartidor_id, motivo="el repartidor terminó su jornada"
+    )
 
     db.commit()
     return JornadaTerminada(activo=False, pedidos_reasignados=reasignados, pedidos_sin_repartidor=sin_repartidor)

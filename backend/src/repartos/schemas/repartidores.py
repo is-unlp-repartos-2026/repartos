@@ -43,3 +43,11 @@ class RepartidorRegistrado(Repartidor):
     """
 
     codigo_acceso: str
+
+
+class RepartidorDeshabilitado(BaseModel):
+    """Respuesta de deshabilitar: el repartidor y qué pasó con los pedidos que tenía asignados."""
+
+    repartidor: Repartidor
+    pedidos_reasignados: int  # pasaron a otro repartidor apto
+    pedidos_sin_repartidor: int  # no había otro apto: volvieron a "registrado"
