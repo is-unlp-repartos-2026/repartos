@@ -182,3 +182,16 @@ def cambiar_habilitado(db: Session, repartidor_id: int, habilitado: bool) -> Non
         text("UPDATE repartidores SET habilitado = :habilitado WHERE id = :id"),
         {"habilitado": habilitado, "id": repartidor_id},
     )
+
+
+def cambiar_habilitacion(
+    db: Session, repartidor_id: int, peso_max_kg: float, alto_max_cm: float, ancho_max_cm: float, largo_max_cm: float
+) -> None:
+    """Cambia la carga máxima que puede transportar (HU-11)."""
+    db.execute(
+        text(
+            "UPDATE repartidores SET peso_max_kg = :peso, alto_max_cm = :alto, "
+            "ancho_max_cm = :ancho, largo_max_cm = :largo WHERE id = :id"
+        ),
+        {"peso": peso_max_kg, "alto": alto_max_cm, "ancho": ancho_max_cm, "largo": largo_max_cm, "id": repartidor_id},
+    )

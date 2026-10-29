@@ -18,6 +18,7 @@ from repartos.schemas.pedidos import (
 )
 from repartos.schemas.repartidores import (
     DatosNuevoRepartidor,
+    Habilitacion,
     Repartidor,
     RepartidorDeshabilitado,
     RepartidorRegistrado,
@@ -156,3 +157,19 @@ def habilitar_repartidor(repartidor_id: int, operario_id: OperarioActual, db: Se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repartidor no encontrado")
     except repartidores.YaEstaEnEseEstado:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El repartidor ya está habilitado")
+
+
+@router.put("/repartidores/{repartidor_id}/habilitacion")
+def modificar_habilitacion(
+    repartidor_id: int, datos: Habilitacion, operario_id: OperarioActual, db: SesionDB
+) -> Repartidor:
+    """HU-11: cambia el peso y las medidas máximas que puede llevar el repartidor."""
+    try:
+        return repartidores.modificar_habilitacion(db, repartidor_id, datos)
+    except repartidores.RepartidorNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repartidor no encontrado")
+    except repartidores.TienePedidosEnCurso:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El repartidor tiene pedidos en curso: no se puede cambiar su habilitación hasta que los termine",
+        )

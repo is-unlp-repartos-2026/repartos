@@ -21,6 +21,15 @@ class DatosNuevoRepartidor(BaseModel):
     largo_max_cm: float = Field(gt=0)
 
 
+class Habilitacion(BaseModel):
+    """La carga máxima que puede transportar un repartidor (body del PUT .../habilitacion, HU-11)."""
+
+    peso_max_kg: float = Field(gt=0)
+    alto_max_cm: float = Field(gt=0)
+    ancho_max_cm: float = Field(gt=0)
+    largo_max_cm: float = Field(gt=0)
+
+
 class Repartidor(BaseModel):
     """Los datos de un repartidor tal como los ve el operario."""
 

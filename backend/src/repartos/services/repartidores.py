@@ -1,4 +1,5 @@
-"""Reglas de los repartidores (HU-09 Registrar, HU-10 Listar, HU-12 Habilitar o deshabilitar)."""
+"""Reglas de los repartidores (HU-09 Registrar, HU-10 Listar, HU-11 Modificar habilitación,
+HU-12 Habilitar o deshabilitar)."""
 
 from sqlalchemy.orm import Session
 
@@ -6,6 +7,7 @@ from repartos.core.security import generar_codigo_acceso, hashear_codigo_acceso
 from repartos.repositories import pedidos, repartidores
 from repartos.schemas.repartidores import (
     DatosNuevoRepartidor,
+    Habilitacion,
     Repartidor,
     RepartidorDeshabilitado,
     RepartidorRegistrado,
@@ -31,6 +33,10 @@ class YaEstaEnEseEstado(Exception):
 
 class TienePedidosEnCamino(Exception):
     """No se puede deshabilitar a un repartidor con pedidos retirados sin entregar."""
+
+
+class TienePedidosEnCurso(Exception):
+    """No se puede cambiar la habilitación de un repartidor con pedidos asignados o en camino."""
 
 
 def registrar_repartidor(db: Session, datos: DatosNuevoRepartidor) -> RepartidorRegistrado:
@@ -101,5 +107,26 @@ def habilitar(db: Session, repartidor_id: int) -> Repartidor:
         raise YaEstaEnEseEstado
 
     repartidores.cambiar_habilitado(db, repartidor_id, True)
+    db.commit()
+    return Repartidor(**repartidores.buscar_por_id(db, repartidor_id))
+
+
+def modificar_habilitacion(db: Session, repartidor_id: int, datos: Habilitacion) -> Repartidor:
+    """HU-11: solo si no tiene pedidos en curso (si achicaran su capacidad, podría quedar con un pedido
+    que ya no puede llevar). La nueva habilitación se usa en las próximas asignaciones."""
+    repartidor = repartidores.buscar_por_id_y_bloquear(db, repartidor_id)
+    if repartidor is None:
+        raise RepartidorNoEncontrado
+    if pedidos.contar_en_curso_de(db, repartidor_id) > 0:
+        raise TienePedidosEnCurso
+
+    repartidores.cambiar_habilitacion(
+        db,
+        repartidor_id,
+        peso_max_kg=datos.peso_max_kg,
+        alto_max_cm=datos.alto_max_cm,
+        ancho_max_cm=datos.ancho_max_cm,
+        largo_max_cm=datos.largo_max_cm,
+    )
     db.commit()
     return Repartidor(**repartidores.buscar_por_id(db, repartidor_id))

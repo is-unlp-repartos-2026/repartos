@@ -238,3 +238,19 @@ def listar_en_curso(db: Session) -> list[RowMapping]:
         },
     )
     return list(resultado.mappings())
+
+
+def contar_en_curso_de(db: Session, repartidor_id: int) -> int:
+    """Cuántos pedidos tiene en curso ese repartidor: asignados (sin retirar) y en camino."""
+    resultado = db.execute(
+        text(
+            "SELECT count(*) FROM pedidos "
+            "WHERE repartidor_id = :repartidor_id AND estado IN (:asignado, :en_camino)"
+        ),
+        {
+            "repartidor_id": repartidor_id,
+            "asignado": EstadoPedido.REPARTIDOR_ASIGNADO,
+            "en_camino": EstadoPedido.EN_CAMINO,
+        },
+    )
+    return resultado.scalar_one()
