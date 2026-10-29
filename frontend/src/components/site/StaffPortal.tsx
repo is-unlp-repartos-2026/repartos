@@ -159,6 +159,55 @@ function DriverPortal() {
   </Shell>;
 }
 
+interface RepartidorData {
+  id: string;
+  nombre: string;
+  documento: string;
+  pesoMaxKg: number;
+  dimensionesMax: string;
+  habilitado: boolean;
+  activo: boolean;
+}
+
+const demoRepartidores: RepartidorData[] = [
+  {
+    id: "REP-01",
+    nombre: "Carlos Gómez",
+    documento: "38.123.456",
+    pesoMaxKg: 25,
+    dimensionesMax: "60 x 40 x 40 cm",
+    habilitado: true,
+    activo: true,
+  },
+  {
+    id: "REP-02",
+    nombre: "Lucía Fernández",
+    documento: "40.987.654",
+    pesoMaxKg: 15,
+    dimensionesMax: "40 x 30 x 30 cm",
+    habilitado: false,
+    activo: false,
+  },
+  {
+    id: "REP-03",
+    nombre: "Martín Benítez",
+    documento: "35.456.789",
+    pesoMaxKg: 50,
+    dimensionesMax: "100 x 80 x 60 cm",
+    habilitado: true,
+    activo: false,
+  },
+  {
+    id: "REP-04",
+    nombre: "Sofía Rossi",
+    documento: "42.333.222",
+    pesoMaxKg: 10,
+    dimensionesMax: "30 x 25 x 20 cm",
+    habilitado: false,
+    activo: false,
+  },
+];
+
 function OperatorPortal() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [error, setError] = useState("");
@@ -168,6 +217,9 @@ function OperatorPortal() {
   const [draft, setDraft] = useState<Draft>(emptyShipment);
   const [driverName, setDriverName] = useState("");
   const [tokenError, setTokenError] = useState("");
+  const [seccion, setSeccion] = useState<"envios" | "repartidores">("envios");
+  const [filtroHabilitacion, setFiltroHabilitacion] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
+
   const live = useRef({ tokens, shipments, loggedIn });
   live.current = { tokens, shipments, loggedIn };
 
@@ -176,7 +228,10 @@ function OperatorPortal() {
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
     if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
   });
-  useEffect(() => { if (loggedIn) post({ type: "sync", tokens, shipments }); }, [tokens, shipments, loggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (loggedIn) post({ type: "sync", tokens, shipments });
+  }, [tokens, shipments, loggedIn]);
 
   function login(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -185,11 +240,13 @@ function OperatorPortal() {
     if (!r.success) { setError(r.error.issues[0]?.message ?? "Completá tus datos."); return; }
     setError(""); e.currentTarget.reset(); setLoggedIn(true);
   }
+
   function logout() {
     post({ type: "sync", tokens: [], shipments: [] });
     setLoggedIn(false); setError(""); setAdding(false); setDraft(emptyShipment); setTokens([]);
     setShipments(demoShipments.map((s) => ({ ...s })));
   }
+
   function createToken(e: FormEvent) {
     e.preventDefault();
     const r = driverNameSchema.safeParse(driverName);
@@ -197,10 +254,12 @@ function OperatorPortal() {
     setTokens((t) => [...t, { token: generateDriverToken(t.map((x) => x.token)), nombre: r.data }]);
     setDriverName(""); setTokenError("");
   }
+
   function revoke(token: string) {
     setTokens((t) => t.filter((x) => x.token !== token));
     setShipments((rows) => rows.map((s) => s.repartidor === token ? { ...s, repartidor: undefined, estado: "Pendiente de asignación" } : s));
   }
+
   function addShipment(e: FormEvent) {
     e.preventDefault();
     const r = shipmentSchema.safeParse(draft);
@@ -209,65 +268,230 @@ function OperatorPortal() {
     setShipments((rows) => [...rows, { ...r.data, guia: `DEMO-${String(rows.length + 1).padStart(3, "0")}`, repartidor, estado: repartidor ? "Pendiente de aceptación" : "Pendiente de asignación" }]);
     setAdding(false); setDraft(emptyShipment); setError("");
   }
+
   function assign(guia: string, token: string) {
     setShipments((rows) => rows.map((s) => s.guia === guia ? { ...s, repartidor: token || undefined, estado: token ? "Pendiente de aceptación" : "Pendiente de asignación" } : s));
   }
-  const driverLabel = (t?: string) => { const d = tokens.find((x) => x.token === t); return d ? `${d.token} · ${d.nombre}` : "Sin asignar"; };
 
-  if (!loggedIn) return <Shell role="Operario" title="Acceso de personal">
-    <form className="form staff-login" onSubmit={login} noValidate>
-      <h2>Ingresar como operario</h2>
-      <div className="fgrid">
-        <label className="full">Usuario<input name="usuario" autoComplete="username" maxLength={100} required /></label>
-        <label className="full">Contraseña<input name="password" type="password" autoComplete="current-password" maxLength={128} required /></label>
+  const driverLabel = (t?: string) => {
+    const d = tokens.find((x) => x.token === t);
+    return d ? `${d.token} · ${d.nombre}` : "Sin asignar";
+  };
+
+  const repartidoresFiltrados = demoRepartidores.filter((rep) => {
+    if (filtroHabilitacion === "habilitados") return rep.habilitado;
+    if (filtroHabilitacion === "deshabilitados") return !rep.habilitado;
+    return true;
+  });
+
+  if (!loggedIn) {
+    return (
+      <Shell role="Operario" title="Acceso de personal">
+        <form className="form staff-login" onSubmit={login} noValidate>
+          <h2>Ingresar como operario</h2>
+          <div className="fgrid">
+            <label className="full">Usuario<input name="usuario" autoComplete="username" maxLength={100} required /></label>
+            <label className="full">Contraseña<input name="password" type="password" autoComplete="current-password" maxLength={128} required /></label>
+          </div>
+          {error && <p className="staff-error" role="alert">{error}</p>}
+          <Button className="btn btn-primary staff-submit" type="submit">Ingresar a demostración<ArrowRight /></Button>
+        </form>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell role="Operario" title="Panel de Gestión" onLogout={logout}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+        <Button
+          type="button"
+          variant={seccion === "envios" ? "default" : "outline"}
+          className={seccion === "envios" ? "btn btn-primary" : "staff-secondary"}
+          onClick={() => setSeccion("envios")}
+        >
+          Envíos en proceso
+        </Button>
+        <Button
+          type="button"
+          variant={seccion === "repartidores" ? "default" : "outline"}
+          className={seccion === "repartidores" ? "btn btn-primary" : "staff-secondary"}
+          onClick={() => setSeccion("repartidores")}
+        >
+          Sección de repartidores
+        </Button>
       </div>
-      {error && <p className="staff-error" role="alert">{error}</p>}
-      <Button className="btn btn-primary staff-submit" type="submit">Ingresar a demostración<ArrowRight /></Button>
-    </form>
-  </Shell>;
 
-  return <Shell role="Operario" title="Envíos en proceso" onLogout={logout}>
-    <section className="form shipment-create" aria-labelledby="tokens-title">
-      <h2 id="tokens-title">Tokens de repartidores</h2>
-      <form className="fgrid" onSubmit={createToken} noValidate>
-        <label className="full">Nombre del repartidor<input value={driverName} maxLength={100} onChange={(e) => setDriverName(e.target.value)} /></label>
-        {tokenError && <p className="staff-error" role="alert">{tokenError}</p>}
-        <Button type="submit" className="btn btn-primary"><KeyRound />Generar Token Repartidor</Button>
-      </form>
-      {tokens.length > 0 && <ul style={{ listStyle: "none", padding: 0, marginTop: 16, display: "grid", gap: 8 }}>
-        {tokens.map((t) => <li key={t.token} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <strong style={{ letterSpacing: "0.2em", fontSize: 18 }}>{t.token}</strong><span>{t.nombre}</span>
-          <Button variant="outline" size="sm" className="staff-secondary" onClick={() => revoke(t.token)}><Trash2 />Dar de baja</Button>
-        </li>)}
-      </ul>}
-    </section>
+      {seccion === "repartidores" ? (
+        <section aria-labelledby="repartidores-heading">
+          <div className="staff-toolbar" style={{ flexWrap: "wrap", gap: 16 }}>
+            <div>
+              <h2 id="repartidores-heading" style={{ margin: 0, fontSize: 20 }}>Listado de repartidores</h2>
+              <p style={{ margin: 0, color: "var(--muted-foreground, #666)" }}>
+                Mostrando {repartidoresFiltrados.length} repartidores
+              </p>
+            </div>
 
-    <div className="staff-toolbar"><p>{shipments.length} envíos</p><Button className="btn btn-primary" onClick={() => { setAdding(true); setError(""); }}><PackagePlus />Subir envío</Button></div>
-    {adding && <form className="form shipment-create" onSubmit={addShipment} noValidate>
-      <div className="shipment-card-head"><h2>Nuevo envío</h2><Button type="button" variant="ghost" size="icon" aria-label="Cerrar nuevo envío" onClick={() => { setAdding(false); setError(""); }}><X /></Button></div>
-      <div className="fgrid">
-        {(["origen", "destino", "destinatario", "telefono", "detalle"] as const).map((field) => <label className={field === "detalle" ? "full" : ""} key={field}>{fieldLabels[field]}
-          {field === "detalle"
-            ? <textarea rows={3} maxLength={1000} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />
-            : <input maxLength={field === "telefono" ? 20 : 200} inputMode={field === "telefono" ? "numeric" : "text"} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />}
-        </label>)}
-        <label className="full">Repartidor<select value={draft.repartidor} onChange={(e) => setDraft((v) => ({ ...v, repartidor: e.target.value }))}>
-          <option value="">Sin asignar</option>{tokens.map((t) => <option key={t.token} value={t.token}>{t.token} · {t.nombre}</option>)}
-        </select></label>
-      </div>
-      {error && <p className="staff-error" role="alert">{error}</p>}
-      <Button type="submit" className="btn btn-primary staff-submit"><Check />Guardar envío de ejemplo</Button>
-    </form>}
-    <div className="shipment-table-wrap"><table className="shipment-table">
-      <caption>Registro de envíos · Demostración</caption>
-      <thead><tr>{["Guía", "Origen", "Destino", "Destinatario", "Teléfono", "Detalles del pedido", "Repartidor", "Estado"].map((n) => <th key={n} scope="col">{n}</th>)}</tr></thead>
-      <tbody>{shipments.map((s) => <tr key={s.guia}>
-        <th scope="row">{s.guia}</th><td>{s.origen}</td><td>{s.destino}</td><td>{s.destinatario}</td><td>{s.telefono}</td><td>{s.detalle}</td>
-        <td><select aria-label={`Repartidor de ${s.guia}`} value={tokens.some((t) => t.token === s.repartidor) ? s.repartidor : ""} onChange={(e) => assign(s.guia, e.target.value)}>
-          <option value="">Sin asignar</option>{tokens.map((t) => <option key={t.token} value={t.token}>{driverLabel(t.token)}</option>)}
-        </select></td>
-        <td><span className="staff-status">{s.estado}</span></td>
-      </tr>)}</tbody>
-    </table></div>
-  </Shell>;
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label htmlFor="filtro-hab" style={{ fontSize: 14, fontWeight: 500 }}>
+                Filtrar por habilitación:
+              </label>
+              <select
+                id="filtro-hab"
+                value={filtroHabilitacion}
+                onChange={(e) => setFiltroHabilitacion(e.target.value as "todos" | "habilitados" | "deshabilitados")}
+                style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #ccc" }}
+              >
+                <option value="todos">Todos</option>
+                <option value="habilitados">Habilitados</option>
+                <option value="deshabilitados">Deshabilitados</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="shipment-table-wrap" style={{ marginTop: 16 }}>
+            <table className="shipment-table">
+              <caption>Nómina de repartidores</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Documento</th>
+                  <th scope="col">Carga habilitada (peso y dimensiones máx.)</th>
+                  <th scope="col">Habilitación</th>
+                  <th scope="col">Disponibilidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repartidoresFiltrados.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: 24 }}>
+                      No se encontraron repartidores para el filtro seleccionado.
+                    </td>
+                  </tr>
+                ) : (
+                  repartidoresFiltrados.map((rep) => (
+                    <tr key={rep.id}>
+                      <th scope="row" style={{ fontWeight: 600 }}>{rep.nombre}</th>
+                      <td>{rep.documento}</td>
+                      <td>{rep.pesoMaxKg} kg — {rep.dimensionesMax}</td>
+                      <td>
+                        <span
+                          className="staff-status"
+                          style={{
+                            background: rep.habilitado ? "#e6f4ea" : "#fce8e6",
+                            color: rep.habilitado ? "#137333" : "#c5221f",
+                          }}
+                        >
+                          {rep.habilitado ? "Habilitado" : "Deshabilitado"}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="staff-status"
+                          style={{
+                            background: rep.activo ? "#e8f0fe" : "#f1f3f4",
+                            color: rep.activo ? "#1a73e8" : "#5f6368",
+                          }}
+                        >
+                          {rep.activo ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="form shipment-create" aria-labelledby="tokens-title">
+            <h2 id="tokens-title">Tokens de repartidores</h2>
+            <form className="fgrid" onSubmit={createToken} noValidate>
+              <label className="full">Nombre del repartidor
+                <input value={driverName} maxLength={100} onChange={(e) => setDriverName(e.target.value)} />
+              </label>
+              {tokenError && <p className="staff-error" role="alert">{tokenError}</p>}
+              <Button type="submit" className="btn btn-primary"><KeyRound />Generar Token Repartidor</Button>
+            </form>
+            {tokens.length > 0 && (
+              <ul style={{ listStyle: "none", padding: 0, marginTop: 16, display: "grid", gap: 8 }}>
+                {tokens.map((t) => (
+                  <li key={t.token} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <strong style={{ letterSpacing: "0.2em", fontSize: 18 }}>{t.token}</strong><span>{t.nombre}</span>
+                    <Button variant="outline" size="sm" className="staff-secondary" onClick={() => revoke(t.token)}>
+                      <Trash2 />Dar de baja
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <div className="staff-toolbar">
+            <p>{shipments.length} envíos</p>
+            <Button className="btn btn-primary" onClick={() => { setAdding(true); setError(""); }}>
+              <PackagePlus />Subir envío
+            </Button>
+          </div>
+
+          {adding && (
+            <form className="form shipment-create" onSubmit={addShipment} noValidate>
+              <div className="shipment-card-head">
+                <h2>Nuevo envío</h2>
+                <Button type="button" variant="ghost" size="icon" aria-label="Cerrar nuevo envío" onClick={() => { setAdding(false); setError(""); }}>
+                  <X />
+                </Button>
+              </div>
+              <div className="fgrid">
+                {(["origen", "destino", "destinatario", "telefono", "detalle"] as const).map((field) => (
+                  <label className={field === "detalle" ? "full" : ""} key={field}>
+                    {fieldLabels[field]}
+                    {field === "detalle"
+                      ? <textarea rows={3} maxLength={1000} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />
+                      : <input maxLength={field === "telefono" ? 20 : 200} inputMode={field === "telefono" ? "numeric" : "text"} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />}
+                  </label>
+                ))}
+                <label className="full">Repartidor
+                  <select value={draft.repartidor} onChange={(e) => setDraft((v) => ({ ...v, repartidor: e.target.value }))}>
+                    <option value="">Sin asignar</option>
+                    {tokens.map((t) => <option key={t.token} value={t.token}>{t.token} · {t.nombre}</option>)}
+                  </select>
+                </label>
+              </div>
+              {error && <p className="staff-error" role="alert">{error}</p>}
+              <Button type="submit" className="btn btn-primary staff-submit"><Check />Guardar envío de ejemplo</Button>
+            </form>
+          )}
+
+          <div className="shipment-table-wrap">
+            <table className="shipment-table">
+              <caption>Registro de envíos · Demostración</caption>
+              <thead>
+                <tr>{["Guía", "Origen", "Destino", "Destinatario", "Teléfono", "Detalles del pedido", "Repartidor", "Estado"].map((n) => <th key={n} scope="col">{n}</th>)}</tr>
+              </thead>
+              <tbody>
+                {shipments.map((s) => (
+                  <tr key={s.guia}>
+                    <th scope="row">{s.guia}</th>
+                    <td>{s.origen}</td>
+                    <td>{s.destino}</td>
+                    <td>{s.destinatario}</td>
+                    <td>{s.telefono}</td>
+                    <td>{s.detalle}</td>
+                    <td>
+                      <select aria-label={`Repartidor de ${s.guia}`} value={tokens.some((t) => t.token === s.repartidor) ? s.repartidor : ""} onChange={(e) => assign(s.guia, e.target.value)}>
+                        <option value="">Sin asignar</option>
+                        {tokens.map((t) => <option key={t.token} value={t.token}>{driverLabel(t.token)}</option>)}
+                      </select>
+                    </td>
+                    <td><span className="staff-status">{s.estado}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Shell>
+  );
 }
