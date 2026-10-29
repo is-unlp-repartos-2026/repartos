@@ -87,13 +87,12 @@ function DriverPortal() {
           {error && <p className="staff-error" role="alert">{error}</p>}
           <Button className="btn btn-primary staff-submit" type="submit" disabled={!!pending}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
         </form>
-      ) : mine.length === 0 ? (
-        <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>
       ) : (
         <>
           <div style={{marginTop: 20, marginBottom: 20, padding: 16, border: "1px solid #ddd", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center",}}>
           <span> Estado actual:
           <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span><Button onClick={() => token && post({ type: "toggleDisponibilidad", token: token.token, }) } > {miInfo?.activo ? "Ponerse inactivo" : "Ponerse activo"} </Button> </div>
+          {mine.length === 0 && ( <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>)}
           <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
             {mine.map((s) => (
               <article className="shipment-card" key={s.guia} style={{ cursor: "pointer", transition: "box-shadow 0.2s" }} onClick={() => setPedidoSeleccionado(s)}>
