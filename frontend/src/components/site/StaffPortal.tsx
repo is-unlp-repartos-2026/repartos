@@ -72,6 +72,7 @@ function DriverPortal() {
   }
 
   const mine = token && state ? state.shipments.filter((s) => s.repartidor === token.token) : [];
+  const miInfo = token && state ? state.tokens.find((t) => t.token === token.token): null;
   
   return (
     <Shell role="Repartidor" title={token ? `Mis entregas - ${token.nombre}` : "Acceso de repartidor"} onLogout={token ? () => setToken(null) : undefined}>
@@ -90,6 +91,17 @@ function DriverPortal() {
         <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>
       ) : (
         <>
+          <div style={{
+          marginBottom: 20,
+          padding: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          }}
+          > <span> Estado: <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span><Button> {miInfo?.activo ? "Ponerse inactivo" : "Ponerse activo"}</Button>
+          </div>
           <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
             {mine.map((s) => (
               <article className="shipment-card" key={s.guia} style={{ cursor: "pointer", transition: "box-shadow 0.2s" }} onClick={() => setPedidoSeleccionado(s)}>
