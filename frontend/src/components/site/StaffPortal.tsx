@@ -167,9 +167,10 @@ function OperatorPortal() {
   const live = useRef({ tokens, shipments, loggedIn });
   live.current = { tokens, shipments, loggedIn };
 
-  const post = useChannel((m) => {
+  const post = useChannel((m) => { 
     if (!live.current.loggedIn) return;
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
+    if (m.type === "toggleDisponibilidad") { setTokens((rows) => rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t));}
     if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
   });
 
