@@ -1,5 +1,5 @@
 """Reglas de las acciones del repartidor sobre sus pedidos (HU-18 Retirar pedido, HU-07 Entrega fallida,
-HU-20 Confirmar entrega)."""
+HU-20 Confirmar entrega, HU-16 Consultar pedidos asignados)."""
 
 from sqlalchemy import RowMapping
 from sqlalchemy.orm import Session
@@ -8,7 +8,7 @@ from repartos.core import fotos
 from repartos.core.config import settings
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
-from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado
+from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado, PedidoAsignado
 from repartos.services.pedidos import EstadoNoPermitido, PedidoNoEncontrado
 
 
@@ -85,3 +85,8 @@ def confirmar_entrega(
         fotos.borrar(nombre_foto)
         raise
     return EstadoActualizado(id=pedido_id, estado=EstadoPedido.ENTREGADO)
+
+
+def listar_pedidos_asignados(db: Session, repartidor_id: int) -> list[PedidoAsignado]:
+    """HU-16: los pedidos que tiene que hacer (asignados y en camino), por fecha de asignación."""
+    return [PedidoAsignado(**fila) for fila in pedidos.listar_en_curso_de(db, repartidor_id)]

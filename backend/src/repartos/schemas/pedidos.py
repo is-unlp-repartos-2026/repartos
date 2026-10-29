@@ -4,6 +4,7 @@ Por privacidad, el contenido del paquete NUNCA se pide ni se devuelve.
 """
 
 import enum
+from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -80,3 +81,13 @@ class DatosEntregaFallida(BaseModel):
         if self.aclaracion and self.aclaracion.strip():
             return f"{self.motivo}: {self.aclaracion.strip()}"
         return str(self.motivo)
+
+
+class PedidoAsignado(BaseModel):
+    """Un pedido en la lista del repartidor (HU-16). Nunca el contenido del paquete."""
+
+    id: int
+    origen: str
+    destino: str
+    estado: EstadoPedido
+    asignado_el: datetime

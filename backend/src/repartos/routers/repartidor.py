@@ -10,7 +10,7 @@ from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
 from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
-from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado
+from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado, PedidoAsignado
 from repartos.schemas.repartidores import Repartidor
 from repartos.services import auth, entregas, jornada
 
@@ -59,6 +59,13 @@ def terminar_jornada(repartidor_id: RepartidorActual, db: SesionDB) -> JornadaTe
             status_code=status.HTTP_409_CONFLICT,
             detail="Tenés pedidos en camino: terminá tus entregas antes de terminar la jornada",
         )
+
+
+@router.get("/pedidos")
+def listar_pedidos_asignados(repartidor_id: RepartidorActual, db: SesionDB) -> list[PedidoAsignado]:
+    """HU-16: los pedidos asignados y en camino del repartidor. Si no tiene, devuelve una lista vacía
+    (la app muestra el mensaje "No tenés pedidos asignados")."""
+    return entregas.listar_pedidos_asignados(db, repartidor_id)
 
 
 @router.post("/pedidos/{pedido_id}/retirar")

@@ -156,3 +156,29 @@ def registrar_entrega(db: Session, pedido_id: int, foto: str) -> None:
         text("UPDATE pedidos SET estado = :estado, foto_entrega = :foto WHERE id = :id"),
         {"estado": EstadoPedido.ENTREGADO, "foto": foto, "id": pedido_id},
     )
+
+
+def listar_en_curso_de(db: Session, repartidor_id: int) -> list[RowMapping]:
+    """Pedidos que el repartidor tiene que hacer: asignados (sin retirar) y en camino (HU-16).
+
+    Se ordenan por fecha de asignación (supuesto del equipo). Esa fecha no está en la tabla pedidos:
+    sale del historial, de la última vez que el pedido pasó a "repartidor asignado" con ESTE repartidor
+    (un pedido reasignado pudo haber sido de otro antes). Por eso el JOIN + MAX + GROUP BY.
+    """
+    resultado = db.execute(
+        text(
+            "SELECT p.id, p.origen, p.destino, p.estado, MAX(c.fecha_hora) AS asignado_el "
+            "FROM pedidos p "
+            "JOIN cambios_estado c ON c.pedido_id = p.id "
+            "  AND c.estado = :asignado AND c.repartidor_id = p.repartidor_id "
+            "WHERE p.repartidor_id = :repartidor_id AND p.estado IN (:asignado, :en_camino) "
+            "GROUP BY p.id "
+            "ORDER BY asignado_el, p.id"
+        ),
+        {
+            "repartidor_id": repartidor_id,
+            "asignado": EstadoPedido.REPARTIDOR_ASIGNADO,
+            "en_camino": EstadoPedido.EN_CAMINO,
+        },
+    )
+    return list(resultado.mappings())
