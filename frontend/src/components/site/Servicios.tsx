@@ -31,7 +31,6 @@ export function Destacados() {
                 <span className="num">0{i + 1}</span>
                 <h3>{c.t}</h3>
                 <p>{c.d}</p>
-                <a href="#" className="more">Más información →</a>
               </div>
             </article>
           ))}
