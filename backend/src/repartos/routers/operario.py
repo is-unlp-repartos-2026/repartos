@@ -6,7 +6,7 @@ from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
-from repartos.schemas.pedidos import DatosNuevoPedido, PedidoRegistrado
+from repartos.schemas.pedidos import DatosNuevoPedido, EstadoActualizado, PedidoRegistrado
 from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
 from repartos.services import auth, pedidos, repartidores
 
@@ -49,3 +49,17 @@ def registrar_repartidor(
 def registrar_pedido(datos: DatosNuevoPedido, operario_id: OperarioActual, db: SesionDB) -> PedidoRegistrado:
     """HU-04: el operario registra un pedido; se le asigna un repartidor apto si hay uno."""
     return pedidos.registrar_pedido(db, datos)
+
+
+@router.post("/pedidos/{pedido_id}/cancelar")
+def cancelar_pedido(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -> EstadoActualizado:
+    """HU-06: el operario cancela un pedido que todavía no fue retirado."""
+    try:
+        return pedidos.cancelar_pedido(db, pedido_id)
+    except pedidos.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except pedidos.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se puede cancelar un pedido registrado o con repartidor asignado",
+        )

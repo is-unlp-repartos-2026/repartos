@@ -42,3 +42,10 @@ class PedidoRegistrado(BaseModel):
     estado: EstadoPedido
     repartidor: RepartidorDelPedido | None  # None: no había ningún repartidor apto
     aviso: str | None = None  # mensaje para el operario cuando el pedido queda sin asignar
+
+
+class EstadoActualizado(BaseModel):
+    """Respuesta de un cambio de estado: el pedido y el estado en que quedó."""
+
+    id: int
+    estado: EstadoPedido

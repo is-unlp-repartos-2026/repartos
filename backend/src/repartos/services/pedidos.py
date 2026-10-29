@@ -1,12 +1,20 @@
-"""Reglas de los pedidos (HU-04 Registrar pedido)."""
+"""Reglas de los pedidos del lado del operario (HU-04 Registrar pedido, HU-06 Cancelar pedido)."""
 
 from sqlalchemy.orm import Session
 
 from repartos.core.security import generar_codigo_seguimiento
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
-from repartos.schemas.pedidos import DatosNuevoPedido, PedidoRegistrado, RepartidorDelPedido
+from repartos.schemas.pedidos import DatosNuevoPedido, EstadoActualizado, PedidoRegistrado, RepartidorDelPedido
 from repartos.services import asignacion
+
+class PedidoNoEncontrado(Exception):
+    """El pedido no existe (o, para un repartidor, no es suyo)."""
+
+
+class EstadoNoPermitido(Exception):
+    """El pedido no está en un estado que permita esa acción."""
+
 
 AVISO_SIN_REPARTIDOR = (
     "No hay ningún repartidor disponible que pueda llevar este pedido. "
@@ -52,3 +60,20 @@ def registrar_pedido(db: Session, datos: DatosNuevoPedido) -> PedidoRegistrado:
         **(dict(pedido) | {"estado": EstadoPedido.REPARTIDOR_ASIGNADO, "repartidor_id": repartidor["id"]}),
         repartidor=RepartidorDelPedido(**repartidor),
     )
+
+
+def cancelar_pedido(db: Session, pedido_id: int) -> EstadoActualizado:
+    """HU-06: solo hasta "repartidor asignado" inclusive (después el paquete ya está en la calle)."""
+    pedido = pedidos.buscar_por_id_y_bloquear(db, pedido_id)
+    if pedido is None:
+        raise PedidoNoEncontrado
+    if pedido["estado"] not in (EstadoPedido.REGISTRADO, EstadoPedido.REPARTIDOR_ASIGNADO):
+        raise EstadoNoPermitido
+
+    # El repartidor_id se conserva: queda registrado a quién estaba asignado cuando se canceló.
+    pedidos.cambiar_estado(db, pedido_id, EstadoPedido.CANCELADO)
+    cambios_estado.insertar(
+        db, pedido_id, EstadoPedido.CANCELADO, repartidor_id=pedido["repartidor_id"], detalle="Cancelado por el operario"
+    )
+    db.commit()
+    return EstadoActualizado(id=pedido_id, estado=EstadoPedido.CANCELADO)

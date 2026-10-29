@@ -5,15 +5,8 @@ from sqlalchemy.orm import Session
 
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
-from repartos.schemas.entregas import EstadoActualizado
-
-
-class PedidoNoEncontrado(Exception):
-    """El pedido no existe o no es de este repartidor."""
-
-
-class EstadoNoPermitido(Exception):
-    """El pedido no está en el estado que la acción necesita."""
+from repartos.schemas.pedidos import EstadoActualizado
+from repartos.services.pedidos import EstadoNoPermitido, PedidoNoEncontrado
 
 
 def _pedido_del_repartidor(db: Session, pedido_id: int, repartidor_id: int) -> RowMapping:

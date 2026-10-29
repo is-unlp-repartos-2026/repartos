@@ -6,8 +6,8 @@ from repartos.core.security import REPARTIDOR_DESHABILITADO, RepartidorActual
 from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
-from repartos.schemas.entregas import EstadoActualizado
 from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
+from repartos.schemas.pedidos import EstadoActualizado
 from repartos.schemas.repartidores import Repartidor
 from repartos.services import auth, entregas, jornada
 
