@@ -12,3 +12,6 @@ __pycache__/
 .pytest_cache/
 
 frontend/node_moudules
+
+# Fotos de las entregas (HU-20): son datos, no código
+backend/uploads/

@@ -1,12 +1,23 @@
-"""Reglas de las acciones del repartidor sobre sus pedidos (HU-18 Retirar pedido, HU-07 Entrega fallida)."""
+"""Reglas de las acciones del repartidor sobre sus pedidos (HU-18 Retirar pedido, HU-07 Entrega fallida,
+HU-20 Confirmar entrega)."""
 
 from sqlalchemy import RowMapping
 from sqlalchemy.orm import Session
 
+from repartos.core import fotos
+from repartos.core.config import settings
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
 from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado
 from repartos.services.pedidos import EstadoNoPermitido, PedidoNoEncontrado
+
+
+class FotoInvalida(Exception):
+    """El archivo no es una imagen JPG, PNG o WEBP, o es demasiado grande."""
+
+
+class DniNoCoincide(Exception):
+    """El DNI de quien recibe no es el que se cargó en el pedido."""
 
 
 def _pedido_del_repartidor(db: Session, pedido_id: int, repartidor_id: int) -> RowMapping:
@@ -46,3 +57,31 @@ def registrar_entrega_fallida(
     cambios_estado.insertar(db, pedido_id, EstadoPedido.ENTREGA_FALLIDA, repartidor_id=repartidor_id, detalle=motivo)
     db.commit()
     return EstadoActualizado(id=pedido_id, estado=EstadoPedido.ENTREGA_FALLIDA)
+
+
+def confirmar_entrega(
+    db: Session, pedido_id: int, repartidor_id: int, foto: bytes, dni: str
+) -> EstadoActualizado:
+    """HU-20: solo desde "en camino"; foto y DNI obligatorios; el DNI tiene que coincidir con el del pedido."""
+    pedido = _pedido_del_repartidor(db, pedido_id, repartidor_id)
+    if pedido["estado"] != EstadoPedido.EN_CAMINO:
+        raise EstadoNoPermitido
+    if dni != pedido["receptor_dni"]:
+        raise DniNoCoincide
+
+    extension = fotos.extension_de_imagen(foto)
+    if extension is None or len(foto) > settings.tamano_max_foto_mb * 1024 * 1024:
+        raise FotoInvalida
+
+    nombre_foto = fotos.guardar(foto, extension)
+    try:
+        pedidos.registrar_entrega(db, pedido_id, nombre_foto)
+        cambios_estado.insertar(
+            db, pedido_id, EstadoPedido.ENTREGADO, repartidor_id=repartidor_id, detalle="DNI de quien recibe verificado"
+        )
+        db.commit()
+    except Exception:
+        # Si la base falla, no queda una foto suelta en el disco que no corresponde a ningún pedido.
+        fotos.borrar(nombre_foto)
+        raise
+    return EstadoActualizado(id=pedido_id, estado=EstadoPedido.ENTREGADO)

@@ -1,7 +1,10 @@
 """Endpoints de la app del repartidor (todos empiezan con /repartidor)."""
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
 
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+
+from repartos.core.config import settings
 from repartos.core.security import REPARTIDOR_DESHABILITADO, RepartidorActual
 from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
@@ -84,4 +87,35 @@ def registrar_entrega_fallida(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Solo se puede registrar una entrega fallida de un pedido en camino",
+        )
+
+
+@router.post("/pedidos/{pedido_id}/confirmar-entrega")
+def confirmar_entrega(
+    pedido_id: int,
+    # multipart/form-data (como un formulario con un archivo adjunto): no es JSON porque lleva una foto.
+    foto: Annotated[UploadFile, File(description="Foto de la entrega, sacada con la cámara de la app")],
+    dni: Annotated[str, Form(pattern=r"^\d{7,8}$", description="DNI de quien recibe, sin puntos")],
+    repartidor_id: RepartidorActual,
+    db: SesionDB,
+) -> EstadoActualizado:
+    """HU-20: el repartidor confirma la entrega con foto y el DNI de quien recibe; pasa a "entregado"."""
+    # Se lee como mucho 1 byte más que el máximo: alcanza para saber si se pasa, sin cargar un archivo gigante.
+    contenido = foto.file.read(settings.tamano_max_foto_mb * 1024 * 1024 + 1)
+    try:
+        return entregas.confirmar_entrega(db, pedido_id, repartidor_id, contenido, dni)
+    except entregas.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except entregas.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Solo se puede confirmar la entrega de un pedido en camino"
+        )
+    except entregas.DniNoCoincide:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="El DNI no coincide con el de quien tiene que recibir el pedido"
+        )
+    except entregas.FotoInvalida:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"La foto tiene que ser una imagen JPG, PNG o WEBP de hasta {settings.tamano_max_foto_mb} MB",
         )

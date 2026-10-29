@@ -4,7 +4,12 @@ Los valores se leen de variables de entorno o del archivo .env (que no se sube a
 Cada desarrollador copia .env.example a .env y lo ajusta.
 """
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/ (este archivo está en backend/src/repartos/core/config.py)
+RAIZ_BACKEND = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -25,6 +30,10 @@ class Settings(BaseSettings):
     # La sesión del repartidor queda guardada en el celular (HU-02): dura 30 días.
     # Si el operario lo deshabilita, pierde el acceso igual (se revisa en cada request).
     minutos_token_repartidor: int = 60 * 24 * 30
+
+    # Dónde se guardan las fotos de las entregas (HU-20). En la base queda solo el nombre del archivo.
+    carpeta_fotos: Path = RAIZ_BACKEND / "uploads" / "fotos"
+    tamano_max_foto_mb: int = 5
 
 
 settings = Settings()
