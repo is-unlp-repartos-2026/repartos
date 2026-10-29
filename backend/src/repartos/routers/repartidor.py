@@ -10,7 +10,12 @@ from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
 from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
-from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado, PedidoAsignado
+from repartos.schemas.pedidos import (
+    DatosEntregaFallida,
+    DetallePedidoAsignado,
+    EstadoActualizado,
+    PedidoAsignado,
+)
 from repartos.schemas.repartidores import Repartidor
 from repartos.services import auth, entregas, jornada
 
@@ -66,6 +71,15 @@ def listar_pedidos_asignados(repartidor_id: RepartidorActual, db: SesionDB) -> l
     """HU-16: los pedidos asignados y en camino del repartidor. Si no tiene, devuelve una lista vacía
     (la app muestra el mensaje "No tenés pedidos asignados")."""
     return entregas.listar_pedidos_asignados(db, repartidor_id)
+
+
+@router.get("/pedidos/{pedido_id}")
+def detalle_pedido_asignado(pedido_id: int, repartidor_id: RepartidorActual, db: SesionDB) -> DetallePedidoAsignado:
+    """HU-17: el detalle de un pedido asignado o en camino del repartidor."""
+    try:
+        return entregas.detalle_pedido_asignado(db, pedido_id, repartidor_id)
+    except entregas.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
 
 
 @router.post("/pedidos/{pedido_id}/retirar")

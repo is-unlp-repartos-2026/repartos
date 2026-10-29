@@ -1,5 +1,5 @@
 """Reglas de las acciones del repartidor sobre sus pedidos (HU-18 Retirar pedido, HU-07 Entrega fallida,
-HU-20 Confirmar entrega, HU-16 Consultar pedidos asignados)."""
+HU-20 Confirmar entrega, HU-16 y HU-17 Consultar pedidos asignados y su detalle)."""
 
 from sqlalchemy import RowMapping
 from sqlalchemy.orm import Session
@@ -8,7 +8,12 @@ from repartos.core import fotos
 from repartos.core.config import settings
 from repartos.models import EstadoPedido
 from repartos.repositories import cambios_estado, pedidos
-from repartos.schemas.pedidos import DatosEntregaFallida, EstadoActualizado, PedidoAsignado
+from repartos.schemas.pedidos import (
+    DatosEntregaFallida,
+    DetallePedidoAsignado,
+    EstadoActualizado,
+    PedidoAsignado,
+)
 from repartos.services.pedidos import EstadoNoPermitido, PedidoNoEncontrado
 
 
@@ -90,3 +95,19 @@ def confirmar_entrega(
 def listar_pedidos_asignados(db: Session, repartidor_id: int) -> list[PedidoAsignado]:
     """HU-16: los pedidos que tiene que hacer (asignados y en camino), por fecha de asignación."""
     return [PedidoAsignado(**fila) for fila in pedidos.listar_en_curso_de(db, repartidor_id)]
+
+
+def detalle_pedido_asignado(db: Session, pedido_id: int, repartidor_id: int) -> DetallePedidoAsignado:
+    """HU-17: el detalle de un pedido que tiene que hacer (asignado o en camino).
+
+    Si no es suyo, o ya terminó (entregado, fallido, cancelado), responde "no encontrado": el repartidor
+    solo ve los datos del receptor mientras los necesita para entregar.
+    """
+    pedido = pedidos.buscar_por_id(db, pedido_id)
+    if (
+        pedido is None
+        or pedido["repartidor_id"] != repartidor_id
+        or pedido["estado"] not in (EstadoPedido.REPARTIDOR_ASIGNADO, EstadoPedido.EN_CAMINO)
+    ):
+        raise PedidoNoEncontrado
+    return DetallePedidoAsignado(**pedido)

@@ -182,3 +182,9 @@ def listar_en_curso_de(db: Session, repartidor_id: int) -> list[RowMapping]:
         },
     )
     return list(resultado.mappings())
+
+
+def buscar_por_id(db: Session, pedido_id: int) -> RowMapping | None:
+    """Trae el pedido sin bloquearlo (para consultas)."""
+    resultado = db.execute(text(f"SELECT {_COLUMNAS} FROM pedidos WHERE id = :id"), {"id": pedido_id})
+    return resultado.mappings().first()

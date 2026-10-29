@@ -91,3 +91,18 @@ class PedidoAsignado(BaseModel):
     destino: str
     estado: EstadoPedido
     asignado_el: datetime
+
+
+class DetallePedidoAsignado(BaseModel):
+    """Lo que el repartidor necesita para hacer la entrega (HU-17). Nunca el contenido del paquete."""
+
+    id: int
+    origen: str
+    destino: str
+    receptor_nombre: str
+    receptor_dni: str
+    peso_kg: float
+    alto_cm: float
+    ancho_cm: float
+    largo_cm: float
+    estado: EstadoPedido
