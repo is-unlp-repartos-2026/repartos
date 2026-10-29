@@ -121,3 +121,24 @@ def volver_a_registrado(db: Session, pedido_id: int) -> None:
         text("UPDATE pedidos SET estado = :estado, repartidor_id = NULL WHERE id = :id"),
         {"estado": EstadoPedido.REGISTRADO, "id": pedido_id},
     )
+
+
+def buscar_por_id_y_bloquear(db: Session, pedido_id: int) -> RowMapping | None:
+    """Trae el pedido y bloquea su fila hasta el commit (FOR UPDATE).
+
+    Se usa antes de cambiarle el estado: si dos acciones llegan a la vez (por ejemplo, el operario cancela
+    justo cuando el repartidor lo retira), la segunda espera y después ve el estado nuevo, en lugar de
+    pisarlo.
+    """
+    resultado = db.execute(
+        text(f"SELECT {_COLUMNAS} FROM pedidos WHERE id = :id FOR UPDATE"),
+        {"id": pedido_id},
+    )
+    return resultado.mappings().first()
+
+
+def cambiar_estado(db: Session, pedido_id: int, estado: EstadoPedido) -> None:
+    db.execute(
+        text("UPDATE pedidos SET estado = :estado WHERE id = :id"),
+        {"estado": estado, "id": pedido_id},
+    )

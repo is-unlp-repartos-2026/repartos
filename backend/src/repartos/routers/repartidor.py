@@ -6,9 +6,10 @@ from repartos.core.security import REPARTIDOR_DESHABILITADO, RepartidorActual
 from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
+from repartos.schemas.entregas import EstadoActualizado
 from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
 from repartos.schemas.repartidores import Repartidor
-from repartos.services import auth, jornada
+from repartos.services import auth, entregas, jornada
 
 router = APIRouter(prefix="/repartidor", tags=["Repartidor"])
 
@@ -54,4 +55,17 @@ def terminar_jornada(repartidor_id: RepartidorActual, db: SesionDB) -> JornadaTe
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Tenés pedidos en camino: terminá tus entregas antes de terminar la jornada",
+        )
+
+
+@router.post("/pedidos/{pedido_id}/retirar")
+def retirar_pedido(pedido_id: int, repartidor_id: RepartidorActual, db: SesionDB) -> EstadoActualizado:
+    """HU-18: el repartidor retira un pedido asignado; pasa a "en camino"."""
+    try:
+        return entregas.retirar_pedido(db, pedido_id, repartidor_id)
+    except entregas.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except entregas.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Solo se puede retirar un pedido con repartidor asignado"
         )
