@@ -50,9 +50,9 @@
 .tb-social { display: flex; align-items: center; gap: 8px; }
 .tb-social span { width: 26px; height: 26px; border: 1px solid oklch(1 0 0 / 30%); border-radius: 50%; display: grid; place-items: center; font-size: 11px; }
 .navbar { position: relative; background: var(--m-ink); height: 118px; }
-.logo-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: 40%; background: var(--m-white); clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%); display: flex; align-items: center; justify-content: flex-end; padding-right: 15%; }
-.logo-wrap::after { content: ""; position: absolute; }
-.navbar::before { content: ""; position: absolute; left: 38.2%; top: 0; bottom: 0; width: 5px; background: var(--m-grad); transform: skewX(-20deg); z-index: 1; }
+.logo-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: 40%; display: flex; align-items: center; justify-content: flex-end; padding-right: 15%; z-index: 2; }
+.logo-wrap::before { content: ""; position: absolute; left: -100vw; right: 0; top: 0; bottom: 0; background: var(--m-white); transform: skewX(-20deg); transform-origin: bottom right; z-index: -1; }
+.navbar::before { content: ""; position: absolute; left: 40%; top: 0; bottom: 0; width: 5px; background: var(--m-grad); transform: skewX(-20deg); transform-origin: bottom left; z-index: 3; }
 .logo { display: flex; flex-direction: column; font-style: italic; font-weight: 900; line-height: .9; transform: skewX(-6deg); }
 .logo-top { color: var(--m-orange); font-size: 22px; letter-spacing: .02em; -webkit-text-stroke: 1px var(--m-red-dark); }
 .logo-main { color: var(--m-red); font-size: 44px; letter-spacing: .01em; -webkit-text-stroke: 1.5px var(--m-red-dark); text-shadow: 2px 3px 0 oklch(0 0 0 / 20%); margin-left: 60px; }
@@ -186,7 +186,7 @@
   .nav { display: none; }
   .burger { display: block; }
   .logo-wrap { width: 75%; padding-right: 25%; }
-  .navbar::before { left: 70%; }
+  .navbar::before { left: 75%; }
   .navbar { height: 90px; }
   .grid4, .benefits { grid-template-columns: 1fr 1fr; }
   .benefit:nth-child(3) { border-left: 0; }
@@ -260,7 +260,7 @@ html { scroll-behavior: smooth; }
 @media (max-width: 700px) {
   .return-home { font-size: 12px; padding: 0 12px; height: 42px; }
   .navbar:has(.return-home) .logo-wrap { width: 45%; }
-  .navbar:has(.return-home)::before { left: 40%; }
+  .navbar:has(.return-home)::before { left: 45%; }
   .staff-entry { justify-content: stretch; }
   .staff-entry > a { flex: 1; }
   .staff-heading, .shipment-card-head { flex-wrap: wrap; }
