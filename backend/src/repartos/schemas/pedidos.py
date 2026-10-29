@@ -137,3 +137,25 @@ class DetallePedidoOperario(BaseModel):
     foto_url: str | None
     # Solo si la entrega falló.
     motivo_fallo: str | None
+
+
+class PedidoEnTablero(BaseModel):
+    """Un pedido en el tablero del operario (HU-22)."""
+
+    id: int
+    codigo_seguimiento: str
+    origen: str
+    destino: str
+    repartidor: RepartidorDelPedido | None
+    desde: datetime  # cuándo pasó a su estado actual
+
+
+class Tablero(BaseModel):
+    """Los pedidos en curso agrupados por estado. Los finales (entregado, fallido, cancelado) no van.
+
+    "registrado" son los que no tienen repartidor: el frontend los destaca.
+    """
+
+    registrado: list[PedidoEnTablero]
+    repartidor_asignado: list[PedidoEnTablero]
+    en_camino: list[PedidoEnTablero]

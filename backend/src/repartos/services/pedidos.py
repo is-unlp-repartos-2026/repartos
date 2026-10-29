@@ -1,4 +1,5 @@
-"""Reglas de los pedidos del lado del operario (HU-04 Registrar, HU-06 Cancelar, HU-23 Consultar detalle)."""
+"""Reglas de los pedidos del lado del operario (HU-04 Registrar, HU-06 Cancelar, HU-23 Consultar detalle,
+HU-22 Monitorear pedidos en curso)."""
 
 from pathlib import Path
 
@@ -13,8 +14,10 @@ from repartos.schemas.pedidos import (
     DatosNuevoPedido,
     DetallePedidoOperario,
     EstadoActualizado,
+    PedidoEnTablero,
     PedidoRegistrado,
     RepartidorDelPedido,
+    Tablero,
 )
 from repartos.services import asignacion
 
@@ -125,3 +128,28 @@ def ruta_foto(db: Session, pedido_id: int) -> Path:
     if not ruta.is_file():
         raise PedidoNoEncontrado
     return ruta
+
+
+def tablero(db: Session) -> Tablero:
+    """HU-22: los pedidos en curso, cada uno en el grupo de su estado."""
+    grupos: dict[str, list[PedidoEnTablero]] = {
+        EstadoPedido.REGISTRADO: [],
+        EstadoPedido.REPARTIDOR_ASIGNADO: [],
+        EstadoPedido.EN_CAMINO: [],
+    }
+    for fila in pedidos.listar_en_curso(db):
+        grupos[fila["estado"]].append(
+            PedidoEnTablero(
+                id=fila["id"],
+                codigo_seguimiento=fila["codigo_seguimiento"],
+                origen=fila["origen"],
+                destino=fila["destino"],
+                repartidor=_repartidor(fila["repartidor_id"], fila["repartidor_nombre"]),
+                desde=fila["desde"],
+            )
+        )
+    return Tablero(
+        registrado=grupos[EstadoPedido.REGISTRADO],
+        repartidor_asignado=grupos[EstadoPedido.REPARTIDOR_ASIGNADO],
+        en_camino=grupos[EstadoPedido.EN_CAMINO],
+    )

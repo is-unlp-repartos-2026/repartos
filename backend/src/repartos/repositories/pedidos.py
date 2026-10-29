@@ -212,3 +212,29 @@ def buscar_detalle(db: Session, pedido_id: int) -> RowMapping | None:
         {"id": pedido_id},
     )
     return resultado.mappings().first()
+
+
+def listar_en_curso(db: Session) -> list[RowMapping]:
+    """Pedidos en curso para el tablero del operario (HU-22): registrados, asignados y en camino.
+
+    "desde" es la fecha del último cambio de estado (cuánto hace que está así), sacada del historial.
+    Los más viejos primero: son los que más atención necesitan.
+    """
+    resultado = db.execute(
+        text(
+            "SELECT p.id, p.codigo_seguimiento, p.origen, p.destino, p.estado, "
+            "p.repartidor_id, r.nombre AS repartidor_nombre, MAX(c.fecha_hora) AS desde "
+            "FROM pedidos p "
+            "LEFT JOIN repartidores r ON r.id = p.repartidor_id "
+            "JOIN cambios_estado c ON c.pedido_id = p.id "
+            "WHERE p.estado IN (:registrado, :asignado, :en_camino) "
+            "GROUP BY p.id, r.nombre "
+            "ORDER BY desde, p.id"
+        ),
+        {
+            "registrado": EstadoPedido.REGISTRADO,
+            "asignado": EstadoPedido.REPARTIDOR_ASIGNADO,
+            "en_camino": EstadoPedido.EN_CAMINO,
+        },
+    )
+    return list(resultado.mappings())

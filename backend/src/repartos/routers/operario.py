@@ -7,7 +7,13 @@ from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
-from repartos.schemas.pedidos import DatosNuevoPedido, DetallePedidoOperario, EstadoActualizado, PedidoRegistrado
+from repartos.schemas.pedidos import (
+    DatosNuevoPedido,
+    DetallePedidoOperario,
+    EstadoActualizado,
+    PedidoRegistrado,
+    Tablero,
+)
 from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
 from repartos.services import auth, pedidos, repartidores
 
@@ -64,6 +70,16 @@ def cancelar_pedido(pedido_id: int, operario_id: OperarioActual, db: SesionDB) -
             status_code=status.HTTP_409_CONFLICT,
             detail="Solo se puede cancelar un pedido registrado o con repartidor asignado",
         )
+
+
+@router.get("/tablero")
+def tablero(operario_id: OperarioActual, db: SesionDB) -> Tablero:
+    """HU-22: los pedidos en curso agrupados por estado.
+
+    "Se actualiza solo, sin recargar": el frontend llama a este endpoint cada pocos segundos (polling)
+    y redibuja el tablero. Así, cuando un repartidor retira un pedido, el operario lo ve pasar a "en camino".
+    """
+    return pedidos.tablero(db)
 
 
 @router.get("/pedidos/{pedido_id}")
