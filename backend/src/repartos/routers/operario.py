@@ -6,7 +6,8 @@ from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
-from repartos.services import auth
+from repartos.schemas.repartidores import DatosNuevoRepartidor, RepartidorRegistrado
+from repartos.services import auth, repartidores
 
 router = APIRouter(prefix="/operario", tags=["Operario"])
 
@@ -28,3 +29,16 @@ def consultar_sesion(operario_id: OperarioActual, db: SesionDB) -> OperarioLogue
     if operario is None:  # el token es válido, pero el operario ya no existe
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida")
     return OperarioLogueado(id=operario["id"], usuario=operario["usuario"])
+
+
+@router.post("/repartidores", status_code=status.HTTP_201_CREATED)
+def registrar_repartidor(
+    datos: DatosNuevoRepartidor, operario_id: OperarioActual, db: SesionDB
+) -> RepartidorRegistrado:
+    """HU-09: el operario da de alta un repartidor y recibe su código de acceso."""
+    try:
+        return repartidores.registrar_repartidor(db, datos)
+    except repartidores.DniRepetido:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un repartidor con ese DNI")
+    except repartidores.CorreoRepetido:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un repartidor con ese correo")
