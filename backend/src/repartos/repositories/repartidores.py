@@ -17,6 +17,19 @@ def buscar_por_id(db: Session, repartidor_id: int) -> RowMapping | None:
     return resultado.mappings().first()
 
 
+def buscar_por_id_y_bloquear(db: Session, repartidor_id: int) -> RowMapping:
+    """Como buscar_por_id, pero bloquea la fila hasta el commit (FOR UPDATE).
+
+    Se usa antes de cambiar algo del repartidor que depende de sus pedidos (por ejemplo, terminar la
+    jornada): si en ese momento se le está asignando un pedido, espera a que termine y así lo ve.
+    """
+    resultado = db.execute(
+        text(f"SELECT {_COLUMNAS} FROM repartidores WHERE id = :id FOR UPDATE"),
+        {"id": repartidor_id},
+    )
+    return resultado.mappings().one()
+
+
 def buscar_por_codigo_acceso_hash(db: Session, codigo_acceso_hash: str) -> RowMapping | None:
     """Busca al dueño de un código de acceso por su hash (HU-02). Devuelve id y habilitado, o None."""
     resultado = db.execute(

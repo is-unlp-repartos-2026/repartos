@@ -1,14 +1,22 @@
-"""Reglas de la jornada laboral del repartidor (HU-13 Comenzar jornada laboral)."""
+"""Reglas de la jornada laboral del repartidor (HU-13 Comenzar y HU-14 Terminar jornada laboral)."""
 
 from sqlalchemy.orm import Session
 
 from repartos.repositories import pedidos, repartidores
-from repartos.schemas.jornada import JornadaComenzada
+from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
 from repartos.services import asignacion
 
 
 class JornadaYaComenzada(Exception):
     """El repartidor ya está activo."""
+
+
+class JornadaNoComenzada(Exception):
+    """El repartidor no está activo: no tiene jornada que terminar."""
+
+
+class TienePedidosEnCamino(Exception):
+    """No puede terminar la jornada con pedidos retirados sin entregar."""
 
 
 def comenzar_jornada(db: Session, repartidor_id: int) -> JornadaComenzada:
@@ -37,3 +45,26 @@ def comenzar_jornada(db: Session, repartidor_id: int) -> JornadaComenzada:
 
     db.commit()
     return JornadaComenzada(activo=True, pedidos_asignados=asignados)
+
+
+def terminar_jornada(db: Session, repartidor_id: int) -> JornadaTerminada:
+    """Desactiva al repartidor y reasigna sus pedidos "repartidor asignado" (si no hay otro apto, quedan "registrado")."""
+    # Bloquea al repartidor: si justo se le está asignando un pedido nuevo, espera y después lo ve.
+    repartidor = repartidores.buscar_por_id_y_bloquear(db, repartidor_id)
+    if not repartidor["activo"]:
+        raise JornadaNoComenzada
+    if pedidos.contar_en_camino_de(db, repartidor_id) > 0:
+        raise TienePedidosEnCamino
+
+    repartidores.cambiar_activo(db, repartidor_id, False)
+
+    reasignados = 0
+    sin_repartidor = 0
+    for pedido in pedidos.buscar_asignados_a_y_bloquear(db, repartidor_id):
+        if asignacion.reasignar(db, pedido, repartidor_id, motivo="el repartidor terminó su jornada"):
+            reasignados += 1
+        else:
+            sin_repartidor += 1
+
+    db.commit()
+    return JornadaTerminada(activo=False, pedidos_reasignados=reasignados, pedidos_sin_repartidor=sin_repartidor)

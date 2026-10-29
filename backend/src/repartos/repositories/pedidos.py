@@ -90,3 +90,34 @@ def buscar_registrados_que_puede_llevar_y_bloquear(
         },
     )
     return list(resultado.mappings())
+
+
+def contar_en_camino_de(db: Session, repartidor_id: int) -> int:
+    """Cuántos pedidos tiene "en camino" ese repartidor (los que ya retiró y todavía no entregó)."""
+    resultado = db.execute(
+        text("SELECT count(*) FROM pedidos WHERE repartidor_id = :repartidor_id AND estado = :estado"),
+        {"repartidor_id": repartidor_id, "estado": EstadoPedido.EN_CAMINO},
+    )
+    return resultado.scalar_one()
+
+
+def buscar_asignados_a_y_bloquear(db: Session, repartidor_id: int) -> list[RowMapping]:
+    """Pedidos "repartidor asignado" de ese repartidor (todavía no los retiró), del más viejo al más nuevo."""
+    resultado = db.execute(
+        text(
+            f"SELECT {_COLUMNAS} FROM pedidos "
+            "WHERE repartidor_id = :repartidor_id AND estado = :estado "
+            "ORDER BY id "
+            "FOR UPDATE"
+        ),
+        {"repartidor_id": repartidor_id, "estado": EstadoPedido.REPARTIDOR_ASIGNADO},
+    )
+    return list(resultado.mappings())
+
+
+def volver_a_registrado(db: Session, pedido_id: int) -> None:
+    """El pedido queda "registrado" y sin repartidor (cuando se lo sacan a uno y no hay otro apto)."""
+    db.execute(
+        text("UPDATE pedidos SET estado = :estado, repartidor_id = NULL WHERE id = :id"),
+        {"estado": EstadoPedido.REGISTRADO, "id": pedido_id},
+    )

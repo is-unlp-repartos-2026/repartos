@@ -39,3 +39,18 @@ def asignar(
         db, pedido["id"], EstadoPedido.REPARTIDOR_ASIGNADO, repartidor_id=repartidor["id"], detalle=detalle
     )
     return repartidor
+
+
+def reasignar(db: Session, pedido: RowMapping, excluir_repartidor_id: int, motivo: str) -> RowMapping | None:
+    """Le saca el pedido a un repartidor y lo asigna a otro apto; si no hay, vuelve a "registrado".
+
+    La usan las HU que le quitan pedidos a un repartidor: terminar jornada, reasignar, rechazar,
+    deshabilitar repartidor. `motivo` queda en el historial. Devuelve el nuevo repartidor o None.
+    """
+    nuevo = asignar(db, pedido, excluir_repartidor_id=excluir_repartidor_id, detalle=f"Reasignado: {motivo}")
+    if nuevo is None:
+        pedidos.volver_a_registrado(db, pedido["id"])
+        cambios_estado.insertar(
+            db, pedido["id"], EstadoPedido.REGISTRADO, detalle=f"Sin otro repartidor apto: {motivo}"
+        )
+    return nuevo

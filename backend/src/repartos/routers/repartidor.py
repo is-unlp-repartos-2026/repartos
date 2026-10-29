@@ -6,7 +6,7 @@ from repartos.core.security import REPARTIDOR_DESHABILITADO, RepartidorActual
 from repartos.db.session import SesionDB
 from repartos.repositories import repartidores
 from repartos.schemas.auth import CodigoAccesoRepartidor, SesionIniciada
-from repartos.schemas.jornada import JornadaComenzada
+from repartos.schemas.jornada import JornadaComenzada, JornadaTerminada
 from repartos.schemas.repartidores import Repartidor
 from repartos.services import auth, jornada
 
@@ -41,3 +41,17 @@ def comenzar_jornada(repartidor_id: RepartidorActual, db: SesionDB) -> JornadaCo
         return jornada.comenzar_jornada(db, repartidor_id)
     except jornada.JornadaYaComenzada:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya comenzaste tu jornada")
+
+
+@router.post("/jornada/terminar")
+def terminar_jornada(repartidor_id: RepartidorActual, db: SesionDB) -> JornadaTerminada:
+    """HU-14: el repartidor termina su jornada; queda inactivo y sus pedidos sin retirar se reasignan."""
+    try:
+        return jornada.terminar_jornada(db, repartidor_id)
+    except jornada.JornadaNoComenzada:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No comenzaste tu jornada")
+    except jornada.TienePedidosEnCamino:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tenés pedidos en camino: terminá tus entregas antes de terminar la jornada",
+        )

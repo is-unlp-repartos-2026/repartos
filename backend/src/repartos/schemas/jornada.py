@@ -8,3 +8,11 @@ class JornadaComenzada(BaseModel):
 
     activo: bool
     pedidos_asignados: int
+
+
+class JornadaTerminada(BaseModel):
+    """Respuesta de "Terminar jornada": queda inactivo y qué pasó con los pedidos que tenía asignados."""
+
+    activo: bool
+    pedidos_reasignados: int  # pasaron a otro repartidor apto
+    pedidos_sin_repartidor: int  # no había otro apto: volvieron a "registrado"
