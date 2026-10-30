@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Header } from "./Header";
 import { Footer } from "./Inferior";
 import {
-  DEMO_CHANNEL, demoLoginSchema, demoShipments, driverRegistrationSchema, generateDriverToken, shipmentSchema,
+  DEMO_CHANNEL, demoLoginSchema, demoShipments, driverRegistrationSchema, generateDriverToken, generateTrackingCode, shipmentSchema,
   type DemoMessage, type DriverToken, type Shipment, type ShipmentInput,
 } from "@/lib/shipment-demo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-type Draft = ShipmentInput & { repartidor: string };
-const emptyShipment: Draft = { origen: "", destino: "", destinatario: "", telefono: "", detalle: "", repartidor: "" };
-const fieldLabels = { origen: "Origen", destino: "Destino", destinatario: "Destinatario", telefono: "Teléfono", detalle: "Detalles del pedido" } as const;
+type Draft = ShipmentInput;
+const emptyShipment: Draft = { origen: "", destino: "", destinatario: "", documentoReceptor: "", pesoKg: 0, dimensiones: "" };
+const fieldLabels = { origen: "Origen", destino: "Destino", destinatario: "Destinatario", documentoReceptor: "Documento del receptor", pesoKg: "Peso (kg)", dimensiones: "Dimensiones (Ej: 30x20x10 cm)" } as const;
 
 function useChannel(onMessage: (m: DemoMessage) => void) {
   const ref = useRef<BroadcastChannel | null>(null);
@@ -131,12 +131,10 @@ function DriverPortal() {
                   <div><dt>Origen</dt><dd>{pedidoSeleccionado.origen}</dd></div>
                   <div><dt>Destino</dt><dd>{pedidoSeleccionado.destino}</dd></div>
                   <div><dt>Receptor</dt><dd>{pedidoSeleccionado.destinatario}</dd></div>
-                  <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.telefono}</dd></div>
-                  <div><dt>Peso</dt><dd>4.5 kg</dd></div>
-                  <div><dt>Dimensiones</dt><dd>35 x 25 x 20 cm</dd></div>
+                  <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.documentoReceptor}</dd></div>
+                  <div><dt>Peso</dt><dd>{pedidoSeleccionado.pesoKg} kg</dd></div>
+                  <div><dt>Dimensiones</dt><dd>{pedidoSeleccionado.dimensiones}</dd></div>
                 </dl>
-
-                {/* Avanzar estado / Registrar entrega fallida */}
                 {pedidoSeleccionado.estado !== "Pendiente de aceptación" && (
                   <div style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
@@ -151,7 +149,6 @@ function DriverPortal() {
                         <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
                       </select>
                     </label>
-
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
                       Motivo de la falla (Obligatorio si la entrega es fallida)
                       <textarea 
@@ -160,15 +157,7 @@ function DriverPortal() {
                         style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
                       />
                     </label>
-
-                    <Button 
-                      className="btn btn-primary"
-                      onClick={() => {
-                        setPedidoSeleccionado(null);
-                      }}
-                    >
-                      Guardar cambios
-                    </Button>
+                    <Button className="btn btn-primary" onClick={() => setPedidoSeleccionado(null)}>Guardar cambios</Button>
                   </div>
                 )}
               </div>
@@ -184,7 +173,7 @@ function DriverPortal() {
 const demoRepartidoresIniciales: DriverToken[] = [
   { token: "RP01", nombre: "Carlos Gómez", documento: "38.123.456", correo: "carlos@ejemplo.com", pesoMaxKg: 25, dimensionesMax: "60 x 40 x 40 cm", habilitado: true, activo: true },
   { token: "RP02", nombre: "Lucía Fernández", documento: "40.987.654", correo: "lucia@ejemplo.com", pesoMaxKg: 15, dimensionesMax: "40 x 30 x 30 cm", habilitado: false, activo: false },
-  { token: "RP03", nombre: "Martín Benítez", documento: "35.456.789", correo: "martin@ejemplo.com", pesoMaxKg: 50, dimensionesMax: "100 x 80 x 60 cm", habilitado: true, activo: false },
+  { token: "RP03", nombre: "Martín Benítez", documento: "35.456.789", correo: "martin@ejemplo.com", pesoMaxKg: 50, dimensionesMax: "100 x 80 x 60 cm", habilitado: true, activo: true },
 ];
 
 function OperatorPortal() {
@@ -195,10 +184,11 @@ function OperatorPortal() {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyShipment);
   
-  // Alta de repartidor state
   const [driverDraft, setDriverDraft] = useState({ nombre: "", documento: "", correo: "", pesoMaxKg: "", dimensionesMax: "" });
   const [tokenError, setTokenError] = useState("");
   const [tokenGenerado, setTokenGenerado] = useState("");
+  
+  const [resultadoAltaEnvio, setResultadoAltaEnvio] = useState<{ guia: string, estado: string, aviso?: string } | null>(null);
 
   const [seccion, setSeccion] = useState<"envios" | "repartidores">("envios");
   const [filtroHabilitacion, setFiltroHabilitacion] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
@@ -256,15 +246,28 @@ function OperatorPortal() {
 
   function addShipment(e: FormEvent) {
     e.preventDefault();
+    setResultadoAltaEnvio(null);
     const r = shipmentSchema.safeParse(draft);
     if (!r.success) { setError(r.error.issues[0]?.message ?? "Revisá los datos."); return; }
-    const repartidor = draft.repartidor || undefined;
-    setShipments((rows) => [...rows, { ...r.data, guia: `DEMO-${String(rows.length + 1).padStart(3, "0")}`, repartidor, estado: repartidor ? "Pendiente de aceptación" : "Pendiente de asignación" }]);
+    
+    const guiaNueva = generateTrackingCode(shipments.map(s => s.guia));
+    const pesoRequerido = r.data.pesoKg;
+    
+    // Lógica de asignación automática de la HU #13
+    const aptos = tokens.filter(t => t.habilitado && t.activo && t.pesoMaxKg >= pesoRequerido);
+    
+    if (aptos.length > 0) {
+      // Si hay aptos, se asigna al primero que encuentre (en un sistema real se buscaría al que hace más tiempo no recibe pedido)
+      const asignado = aptos[0]!;
+      setShipments((rows) => [...rows, { ...r.data, guia: guiaNueva, repartidor: asignado.token, estado: "Repartidor asignado" }]);
+      setResultadoAltaEnvio({ guia: guiaNueva, estado: "Repartidor asignado" });
+    } else {
+      // Escenario 2: Ningún repartidor apto disponible
+      setShipments((rows) => [...rows, { ...r.data, guia: guiaNueva, repartidor: undefined, estado: "Registrado" }]);
+      setResultadoAltaEnvio({ guia: guiaNueva, estado: "Registrado", aviso: "No se encontró ningún repartidor activo habilitado para su peso y dimensiones." });
+    }
+    
     setAdding(false); setDraft(emptyShipment); setError("");
-  }
-
-  function assign(guia: string, token: string) {
-    setShipments((rows) => rows.map((s) => s.guia === guia ? { ...s, repartidor: token || undefined, estado: token ? "Pendiente de aceptación" : "Pendiente de asignación" } : s));
   }
 
   const driverLabel = (t?: string) => {
@@ -298,7 +301,7 @@ function OperatorPortal() {
     <Shell role="Operario" title="Panel de Gestión" onLogout={logout}>
       <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
         <Button type="button" variant={seccion === "envios" ? "default" : "outline"} className={seccion === "envios" ? "btn btn-primary" : "staff-secondary"} onClick={() => setSeccion("envios")}>Envíos en proceso</Button>
-        <Button type="button" variant={seccion === "repartidores" ? "default" : "outline"} className={seccion === "repartidores" ? "btn btn-primary" : "staff-secondary"} onClick={() => { setSeccion("repartidores"); setTokenGenerado(""); setTokenError(""); }}>Sección de repartidores</Button>
+        <Button type="button" variant={seccion === "repartidores" ? "default" : "outline"} className={seccion === "repartidores" ? "btn btn-primary" : "staff-secondary"} onClick={() => { setSeccion("repartidores"); setTokenGenerado(""); setTokenError(""); setResultadoAltaEnvio(null); }}>Sección de repartidores</Button>
       </div>
 
       {seccion === "repartidores" ? (
@@ -372,8 +375,19 @@ function OperatorPortal() {
         <>
           <div className="staff-toolbar">
             <p>{shipments.length} envíos</p>
-            <Button className="btn btn-primary" onClick={() => { setAdding(true); setError(""); }}><PackagePlus />Subir envío</Button>
+            <Button className="btn btn-primary" onClick={() => { setAdding(true); setError(""); setResultadoAltaEnvio(null); }}><PackagePlus />Subir envío</Button>
           </div>
+          
+          {resultadoAltaEnvio && (
+            <div className="demo-notice" style={{ marginTop: 0, marginBottom: 24, borderLeftColor: "var(--m-orange)", backgroundColor: "#fff7ed" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span><strong>¡Pedido registrado exitosamente!</strong></span>
+                <span style={{ fontSize: 16 }}>Código de seguimiento: <strong style={{ letterSpacing: "0.1em" }}>{resultadoAltaEnvio.guia}</strong></span>
+                <span>Estado: <strong>{resultadoAltaEnvio.estado}</strong></span>
+                {resultadoAltaEnvio.aviso && <span style={{ color: "var(--m-red)" }}>{resultadoAltaEnvio.aviso}</span>}
+              </div>
+            </div>
+          )}
 
           {adding && (
             <form className="form shipment-create" onSubmit={addShipment} noValidate>
@@ -382,23 +396,20 @@ function OperatorPortal() {
                 <Button type="button" variant="ghost" size="icon" aria-label="Cerrar nuevo envío" onClick={() => { setAdding(false); setError(""); }}><X /></Button>
               </div>
               <div className="fgrid">
-                {(["origen", "destino", "destinatario", "telefono", "detalle"] as const).map((field) => (
-                  <label className={field === "detalle" ? "full" : ""} key={field}>
+                {(Object.keys(fieldLabels) as Array<keyof typeof fieldLabels>).map((field) => (
+                  <label className={field === "origen" || field === "destino" ? "full" : ""} key={field}>
                     {fieldLabels[field]}
-                    {field === "detalle"
-                      ? <textarea rows={3} maxLength={1000} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />
-                      : <input maxLength={field === "telefono" ? 20 : 200} inputMode={field === "telefono" ? "numeric" : "text"} value={draft[field]} onChange={(e) => setDraft((v) => ({ ...v, [field]: e.target.value }))} />}
+                    <input 
+                      type={field === "pesoKg" ? "number" : "text"}
+                      step={field === "pesoKg" ? "0.1" : undefined}
+                      value={draft[field] === 0 && field === "pesoKg" ? "" : draft[field]} 
+                      onChange={(e) => setDraft((v) => ({ ...v, [field]: field === "pesoKg" ? Number(e.target.value) : e.target.value }))} 
+                    />
                   </label>
                 ))}
-                <label className="full">Repartidor
-                  <select value={draft.repartidor} onChange={(e) => setDraft((v) => ({ ...v, repartidor: e.target.value }))}>
-                    <option value="">Sin asignar</option>
-                    {tokens.map((t) => <option key={t.token} value={t.token}>{t.token} · {t.nombre}</option>)}
-                  </select>
-                </label>
               </div>
               {error && <p className="staff-error" role="alert">{error}</p>}
-              <Button type="submit" className="btn btn-primary staff-submit"><Check />Guardar envío de ejemplo</Button>
+              <Button type="submit" className="btn btn-primary staff-submit" style={{marginTop: 16}}><Check />Registrar pedido</Button>
             </form>
           )}
 
@@ -406,19 +417,21 @@ function OperatorPortal() {
             <table className="shipment-table">
               <caption>Registro de envíos · Demostración</caption>
               <thead>
-                <tr>{["Guía", "Origen", "Destino", "Destinatario", "Teléfono", "Detalles del pedido", "Repartidor", "Estado"].map((n) => <th key={n} scope="col">{n}</th>)}</tr>
+                <tr>{["Guía", "Origen", "Destino", "Destinatario", "Documento", "Peso / Medidas", "Estado"].map((n) => <th key={n} scope="col">{n}</th>)}</tr>
               </thead>
               <tbody>
                 {shipments.map((s) => (
                   <tr key={s.guia}>
-                    <th scope="row">{s.guia}</th><td>{s.origen}</td><td>{s.destino}</td><td>{s.destinatario}</td><td>{s.telefono}</td><td>{s.detalle}</td>
+                    <th scope="row">{s.guia}</th>
+                    <td>{s.origen}</td>
+                    <td>{s.destino}</td>
+                    <td>{s.destinatario}</td>
+                    <td>{s.documentoReceptor}</td>
+                    <td>{s.pesoKg} kg — {s.dimensiones}</td>
                     <td>
-                      <select aria-label={`Repartidor de ${s.guia}`} value={tokens.some((t) => t.token === s.repartidor) ? s.repartidor : ""} onChange={(e) => assign(s.guia, e.target.value)}>
-                        <option value="">Sin asignar</option>
-                        {tokens.map((t) => <option key={t.token} value={t.token}>{driverLabel(t.token)}</option>)}
-                      </select>
+                      <span className="staff-status">{s.estado}</span>
+                      {s.repartidor && <small style={{display: "block", marginTop: 6, color: "var(--m-muted)"}}>{driverLabel(s.repartidor)}</small>}
                     </td>
-                    <td><span className="staff-status">{s.estado}</span></td>
                   </tr>
                 ))}
               </tbody>
