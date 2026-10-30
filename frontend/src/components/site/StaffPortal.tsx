@@ -51,6 +51,9 @@ function DriverPortal() {
   const [error, setError] = useState("");
   const [state, setState] = useState<{ tokens: DriverToken[]; shipments: Shipment[] } | null>(null);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Shipment | null>(null);
+  
+  // Estado para la HU 54: aviso de error al intentar finalizar jornada
+  const [avisoFinJornada, setAvisoFinJornada] = useState("");
 
   const post = useChannel((m) => { if (m.type === "sync") setState({ tokens: m.tokens, shipments: m.shipments }); });
 
@@ -74,6 +77,25 @@ function DriverPortal() {
   const mine = token && state ? state.shipments.filter((s) => s.repartidor === token.token) : [];
   const miInfo = token && state ? state.tokens.find((t) => t.token === token.token): null;
   
+function handleToggleDisponibilidad() {
+    if (!token || !miInfo) return;
+    setAvisoFinJornada("");
+
+    if (miInfo.activo) {
+      // Bloquear si hay pedidos que no estén finalizados
+      const pedidosEnCurso = mine.some(s => 
+        ["Pendiente de aceptación", "Aceptado", "En camino"].includes(s.estado)
+      );
+      
+      if (pedidosEnCurso) {
+        setAvisoFinJornada("No podés finalizar tu jornada porque tenés pedidos en curso. Primero debés finalizar tus entregas o rechazarlas.");
+        return;
+      }
+    }
+    
+    post({ type: "toggleDisponibilidad", token: token.token });
+  }
+  
   return (
     <Shell role="Repartidor" title={token ? `Mis entregas - ${token.nombre}` : "Acceso de repartidor"} onLogout={token ? () => setToken(null) : undefined}>
       {!token ? (
@@ -89,10 +111,19 @@ function DriverPortal() {
         </form>
       ) : (
         <>
-          <div style={{marginTop: 20, marginBottom: 20, padding: 16, border: "1px solid #ddd", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center",}}>
-          <span> Estado actual:
-          <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span><Button onClick={() => token && post({ type: "toggleDisponibilidad", token: token.token, }) } > {miInfo?.activo ? "Finalizar jornada laboral" : "Comenzar jornada laboral"} </Button> </div>
+          <div style={{marginTop: 20, marginBottom: avisoFinJornada ? 0 : 20, padding: 16, border: "1px solid #ddd", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center",}}>
+            <span> Estado actual: <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span>
+            <Button onClick={handleToggleDisponibilidad} > 
+              {miInfo?.activo ? "Finalizar jornada laboral" : "Comenzar jornada laboral"} 
+            </Button> 
+          </div>
+          
+          {avisoFinJornada && (
+            <p className="staff-error" style={{ marginBottom: 20, marginTop: 8 }} role="alert">{avisoFinJornada}</p>
+          )}
+
           {mine.length === 0 && ( <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>)}
+          
           <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
             {mine.map((s) => (
               <article className="shipment-card" key={s.guia} style={{ cursor: "pointer", transition: "box-shadow 0.2s" }} onClick={() => setPedidoSeleccionado(s)}>
@@ -136,14 +167,26 @@ function DriverPortal() {
                   <div><dt>Dimensiones</dt><dd>{pedidoSeleccionado.dimensiones}</dd></div>
                 </dl>
                 {pedidoSeleccionado.estado !== "Pendiente de aceptación" && (
-                  <div style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}>
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.currentTarget);
+                      const nuevoEstado = formData.get("estado") as string;
+                      if (token) {
+                        post({ type: "decide", token: token.token, guia: pedidoSeleccionado.guia, estado: nuevoEstado });
+                      }
+                      setPedidoSeleccionado(null);
+                    }}
+                    style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}
+                  >
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
                       Actualizar estado del pedido
                       <select
-                        id="select-estado-avance"
+                        name="estado"
                         defaultValue={pedidoSeleccionado.estado}
                         style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #ccc" }}
                       >
+                        <option value="Aceptado">Aceptado</option>
                         <option value="En camino">En camino</option>
                         <option value="Entregado">Entregado con éxito</option>
                         <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
@@ -157,8 +200,8 @@ function DriverPortal() {
                         style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
                       />
                     </label>
-                    <Button className="btn btn-primary" onClick={() => setPedidoSeleccionado(null)}>Guardar cambios</Button>
-                  </div>
+                    <Button type="submit" className="btn btn-primary">Guardar cambios</Button>
+                  </form>
                 )}
               </div>
             )}
@@ -199,27 +242,53 @@ function OperatorPortal() {
   const post = useChannel((m) => { 
     if (!live.current.loggedIn) return;
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
-    if (m.type === "toggleDisponibilidad") {
-  setTokens((rows) => {
-    const updatedTokens = rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t);
-    const rep = updatedTokens.find(t => t.token === m.token);
     
-    if (rep && rep.activo) {
-      setShipments(currentShipments => {
-        let hasChanges = false;
-        const newShipments = currentShipments.map(s => {
-          if (s.estado === "Registrado" && !s.repartidor && rep.pesoMaxKg >= s.pesoKg) {
-            hasChanges = true;
-            return { ...s, repartidor: rep.token, estado: "Repartidor asignado" };
+    if (m.type === "toggleDisponibilidad") {
+      setTokens((rows) => {
+        const updatedTokens = rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t);
+        const rep = updatedTokens.find(t => t.token === m.token);
+        
+        if (rep) {
+          if (rep.activo) {
+            // El repartidor pasa a ACTIVO - Asignarle pedidos registrados aptos (HU 42)
+            setShipments(currentShipments => {
+              let hasChanges = false;
+              const newShipments = currentShipments.map(s => {
+                if (s.estado === "Registrado" && !s.repartidor && rep.pesoMaxKg >= s.pesoKg) {
+                  hasChanges = true;
+                  return { ...s, repartidor: rep.token, estado: "Repartidor asignado" };
+                }
+                return s;
+              });
+              return hasChanges ? newShipments : currentShipments;
+            });
+          } else {
+            // El repartidor pasa a INACTIVO - HU 54: Reasignar pedidos "Repartidor asignado"
+            setShipments(currentShipments => {
+              let hasChanges = false;
+              const newShipments = currentShipments.map(s => {
+                if (s.repartidor === rep.token && s.estado === "Repartidor asignado") {
+                  hasChanges = true;
+                  
+                  // Buscar otro repartidor apto y activo
+                  const aptos = updatedTokens.filter(t => t.habilitado && t.activo && t.pesoMaxKg >= s.pesoKg);
+                  
+                  if (aptos.length > 0) {
+                    return { ...s, repartidor: aptos[0]!.token, estado: "Repartidor asignado" };
+                  } else {
+                    return { ...s, repartidor: undefined, estado: "Registrado" };
+                  }
+                }
+                return s;
+              });
+              return hasChanges ? newShipments : currentShipments;
+            });
           }
-          return s;
-        });
-        return hasChanges ? newShipments : currentShipments;
+        }
+        return updatedTokens;
       });
     }
-    return updatedTokens;
-  });
-}
+    
     if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
   });
 
@@ -273,16 +342,14 @@ function OperatorPortal() {
     const guiaNueva = generateTrackingCode(shipments.map(s => s.guia));
     const pesoRequerido = r.data.pesoKg;
     
-    // Lógica de asignación automática de la HU #13
+    // Lógica de asignación automática
     const aptos = tokens.filter(t => t.habilitado && t.activo && t.pesoMaxKg >= pesoRequerido);
     
     if (aptos.length > 0) {
-      // Si hay aptos, se asigna al primero que encuentre (en un sistema real se buscaría al que hace más tiempo no recibe pedido)
       const asignado = aptos[0]!;
       setShipments((rows) => [...rows, { ...r.data, guia: guiaNueva, repartidor: asignado.token, estado: "Repartidor asignado" }]);
       setResultadoAltaEnvio({ guia: guiaNueva, estado: "Repartidor asignado" });
     } else {
-      // Escenario 2: Ningún repartidor apto disponible
       setShipments((rows) => [...rows, { ...r.data, guia: guiaNueva, repartidor: undefined, estado: "Registrado" }]);
       setResultadoAltaEnvio({ guia: guiaNueva, estado: "Registrado", aviso: "No se encontró ningún repartidor activo habilitado para su peso y dimensiones." });
     }
