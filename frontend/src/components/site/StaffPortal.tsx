@@ -45,7 +45,6 @@ function Shell({ role, title, onLogout, children }: { role: string; title: strin
         <div><p className="eyebrow">SIGER · {role}</p><h1 className="h2">{title}</h1></div>
         {onLogout && <Button variant="outline" className="staff-secondary" onClick={onLogout}><LogOut />Salir</Button>}
       </div>
-      <p className="demo-notice">Demostración · Sin verificación real. Datos de ejemplo, no se guardan.</p>
       {children}
     </div></main><Footer compact />
   </div>;
@@ -206,7 +205,7 @@ function OperatorPortal() {
   
   const [resultadoAltaEnvio, setResultadoAltaEnvio] = useState<{ guia: string, estado: string, aviso?: string } | null>(null);
 
-  const [seccion, setSeccion] = useState<"envios" | "repartidores">("envios");
+  const [seccion, setSeccion] = useState<"envios" | "repartidores">("repartidores");
   const [filtroHabilitacion, setFiltroHabilitacion] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
 
   const live = useRef({ tokens, shipments, loggedIn });
@@ -412,7 +411,7 @@ async function registrarRepartidor(e: FormEvent) {
             <label className="full">Contraseña<input name="password" type="password" autoComplete="current-password" maxLength={128} required /></label>
           </div>
           {error && <p className="staff-error" role="alert">{error}</p>}
-          <Button className="btn btn-primary staff-submit" type="submit">Ingresar a demostración<ArrowRight /></Button>
+          <Button className="btn btn-primary staff-submit" type="submit">Ingresar<ArrowRight /></Button>
         </form>
       </Shell>
     );
@@ -498,73 +497,8 @@ async function registrarRepartidor(e: FormEvent) {
           </div>
         </section>
       ) : (
-        <>
-          <div className="staff-toolbar">
-            <p>{shipments.length} envíos</p>
-            <Button className="btn btn-primary" onClick={() => { setAdding(true); setError(""); setResultadoAltaEnvio(null); }}><PackagePlus />Subir envío</Button>
-          </div>
-          
-          {resultadoAltaEnvio && (
-            <div className="demo-notice" style={{ marginTop: 0, marginBottom: 24, borderLeftColor: "var(--m-orange)", backgroundColor: "#fff7ed" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span><strong>¡Pedido registrado exitosamente!</strong></span>
-                <span style={{ fontSize: 16 }}>Código de seguimiento: <strong style={{ letterSpacing: "0.1em" }}>{resultadoAltaEnvio.guia}</strong></span>
-                <span>Estado: <strong>{resultadoAltaEnvio.estado}</strong></span>
-                {resultadoAltaEnvio.aviso && <span style={{ color: "var(--m-red)" }}>{resultadoAltaEnvio.aviso}</span>}
-              </div>
-            </div>
-          )}
-
-          {adding && (
-            <form className="form shipment-create" onSubmit={addShipment} noValidate>
-              <div className="shipment-card-head">
-                <h2>Nuevo envío</h2>
-                <Button type="button" variant="ghost" size="icon" aria-label="Cerrar nuevo envío" onClick={() => { setAdding(false); setError(""); }}><X /></Button>
-              </div>
-              <div className="fgrid">
-                {(Object.keys(fieldLabels) as Array<keyof typeof fieldLabels>).map((field) => (
-                  <label className={field === "origen" || field === "destino" ? "full" : ""} key={field}>
-                    {fieldLabels[field]}
-                    <input 
-                      type={field === "pesoKg" ? "number" : "text"}
-                      step={field === "pesoKg" ? "0.1" : undefined}
-                      value={draft[field] === 0 && field === "pesoKg" ? "" : draft[field]} 
-                      onChange={(e) => setDraft((v) => ({ ...v, [field]: field === "pesoKg" ? Number(e.target.value) : e.target.value }))} 
-                    />
-                  </label>
-                ))}
-              </div>
-              {error && <p className="staff-error" role="alert">{error}</p>}
-              <Button type="submit" className="btn btn-primary staff-submit" style={{marginTop: 16}}><Check />Registrar pedido</Button>
-            </form>
-          )}
-
-          <div className="shipment-table-wrap">
-            <table className="shipment-table">
-              <caption>Registro de envíos · Demostración</caption>
-              <thead>
-                <tr>{["Guía", "Origen", "Destino", "Destinatario", "Documento", "Peso / Medidas", "Estado"].map((n) => <th key={n} scope="col">{n}</th>)}</tr>
-              </thead>
-              <tbody>
-                {shipments.map((s) => (
-                  <tr key={s.guia}>
-                    <th scope="row">{s.guia}</th>
-                    <td>{s.origen}</td>
-                    <td>{s.destino}</td>
-                    <td>{s.destinatario}</td>
-                    <td>{s.documentoReceptor}</td>
-                    <td>{s.pesoKg} kg — {s.dimensiones}</td>
-                    <td>
-                      <span className="staff-status">{s.estado}</span>
-                      {s.repartidor && <small style={{display: "block", marginTop: 6, color: "var(--m-muted)"}}>{driverLabel(s.repartidor)}</small>}
-                      {s.fechaRetiro && <small style={{display: "block", marginTop: 4, color: "var(--m-blue)", fontSize: "0.75rem"}}>Retirado: {s.fechaRetiro}</small>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        // El registro de pedidos (HU-04) y el tablero (HU-22) todavía no están conectados al backend.
+        <p className="demo-notice">Registro de pedidos y tablero de envíos: próximamente.</p>
       )}
     </Shell>
   );
