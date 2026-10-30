@@ -162,23 +162,13 @@ function DriverPortal() {
                     </label>
 
                     <Button 
-                className="btn btn-primary"
-                onClick={() => {
-                  const selectElement = document.getElementById("select-estado-avance") as HTMLSelectElement;
-                  const nuevoEstado = selectElement ? selectElement.value : pedidoSeleccionado.estado;
-
-                  post({
-                    type: "decide",
-                    token: token!.token,
-                    guia: pedidoSeleccionado.guia,
-                    estado: nuevoEstado
-                  });
-
-                  setPedidoSeleccionado(null);
-                }}
-              >
-                Guardar cambios
-              </Button>
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setPedidoSeleccionado(null);
+                      }}
+                    >
+                      Guardar cambios
+                    </Button>
                   </div>
                 )}
               </div>
