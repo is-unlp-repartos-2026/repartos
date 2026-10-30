@@ -244,7 +244,15 @@ function OperatorPortal() {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyShipment);
   
-  const [driverDraft, setDriverDraft] = useState({ nombre: "", documento: "", correo: "", pesoMaxKg: "", dimensionesMax: "" });
+  const [driverDraft, setDriverDraft] = useState({ 
+  nombre: "", 
+  dni: "", 
+  correo: "", 
+  peso_max_kg: "", 
+  alto_max_cm: "", 
+  ancho_max_cm: "", 
+  largo_max_cm: "" 
+});
   const [tokenError, setTokenError] = useState("");
   const [tokenGenerado, setTokenGenerado] = useState("");
   
@@ -340,22 +348,54 @@ async function login(e: FormEvent<HTMLFormElement>) {
     setTokens(demoRepartidoresIniciales); setShipments(demoShipments.map((s) => ({ ...s })));
   }
 
-  function registrarRepartidor(e: FormEvent) {
+async function registrarRepartidor(e: FormEvent) {
     e.preventDefault();
     setTokenGenerado("");
-    const r = driverRegistrationSchema.safeParse(driverDraft);
-    if (!r.success) { setTokenError(r.error.issues[0]?.message ?? "Revisá los datos ingresados."); return; }
+    setTokenError("");
 
-    if (tokens.some((t) => t.documento === r.data.documento)) {
-      setTokenError("El repartidor ya está registrado en el sistema.");
+    const tokenSession = localStorage.getItem("token");
+    if (!tokenSession) {
+      setTokenError("No hay sesión de operario activa.");
       return;
     }
 
-    const nuevoToken = generateDriverToken(tokens.map((x) => x.token));
-    setTokens((t) => [...t, { ...r.data, token: nuevoToken, habilitado: true, activo: false }]);
-    setTokenGenerado(nuevoToken);
-    setDriverDraft({ nombre: "", documento: "", correo: "", pesoMaxKg: "", dimensionesMax: "" });
-    setTokenError("");
+    try {
+      const payload = {
+        nombre: driverDraft.nombre,
+        dni: driverDraft.dni,
+        correo: driverDraft.correo,
+        peso_max_kg: Number(driverDraft.peso_max_kg),
+        alto_max_cm: Number(driverDraft.alto_max_cm),
+        ancho_max_cm: Number(driverDraft.ancho_max_cm),
+        largo_max_cm: Number(driverDraft.largo_max_cm),
+      };
+
+      // Ajustá la URL base según cómo tengan configurado Vite/Axios
+      const res = await fetch("http://localhost:8000/operario/repartidores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokenSession}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        // FastAPI manda errores 422 en un array dentro de 'detail'
+        const msjError = Array.isArray(data.detail) ? data.detail[0].msg : data.detail;
+        throw new Error(msjError || "Falló el registro en el servidor.");
+      }
+
+      // Si fue exitoso, agregamos al estado local para que se vea en la tabla
+      setTokens((t) => [...t, data]); 
+      setTokenGenerado(data.codigo_acceso); // Acá capturamos el código devuelto por el backend
+      setDriverDraft({ nombre: "", dni: "", correo: "", peso_max_kg: "", alto_max_cm: "", ancho_max_cm: "", largo_max_cm: "" });
+      
+    } catch (err: any) {
+      setTokenError(err.message);
+    }
   }
 
   function revoke(token: string) {
@@ -425,11 +465,15 @@ async function login(e: FormEvent<HTMLFormElement>) {
           <div className="form shipment-create" style={{ padding: 24, marginBottom: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 20, fontSize: 18 }}>Alta de nuevo repartidor</h3>
             <form className="fgrid" onSubmit={registrarRepartidor} noValidate>
-              <label>Nombre<input value={driverDraft.nombre} onChange={(e) => setDriverDraft(v => ({ ...v, nombre: e.target.value }))} /></label>
-              <label>Documento<input value={driverDraft.documento} onChange={(e) => setDriverDraft(v => ({ ...v, documento: e.target.value }))} /></label>
-              <label>Correo electrónico<input type="email" value={driverDraft.correo} onChange={(e) => setDriverDraft(v => ({ ...v, correo: e.target.value }))} /></label>
-              <label>Peso máximo (kg)<input type="number" value={driverDraft.pesoMaxKg} onChange={(e) => setDriverDraft(v => ({ ...v, pesoMaxKg: e.target.value }))} /></label>
-              <label className="full">Dimensiones máximas<input value={driverDraft.dimensionesMax} placeholder="Ej: 60 x 40 x 40 cm" onChange={(e) => setDriverDraft(v => ({ ...v, dimensionesMax: e.target.value }))} /></label>
+              <label className="full">Nombre<input value={driverDraft.nombre} onChange={(e) => setDriverDraft(v => ({ ...v, nombre: e.target.value }))} required /></label>
+              <label>DNI (Sin puntos)<input value={driverDraft.dni} onChange={(e) => setDriverDraft(v => ({ ...v, dni: e.target.value }))} required /></label>
+              <label>Correo electrónico<input type="email" value={driverDraft.correo} onChange={(e) => setDriverDraft(v => ({ ...v, correo: e.target.value }))} required /></label>
+              
+              <label>Peso máx (kg)<input type="number" step="0.1" value={driverDraft.peso_max_kg} onChange={(e) => setDriverDraft(v => ({ ...v, peso_max_kg: e.target.value }))} required /></label>
+              <label>Alto máx (cm)<input type="number" step="0.1" value={driverDraft.alto_max_cm} onChange={(e) => setDriverDraft(v => ({ ...v, alto_max_cm: e.target.value }))} required /></label>
+              <label>Ancho máx (cm)<input type="number" step="0.1" value={driverDraft.ancho_max_cm} onChange={(e) => setDriverDraft(v => ({ ...v, ancho_max_cm: e.target.value }))} required /></label>
+              <label>Largo máx (cm)<input type="number" step="0.1" value={driverDraft.largo_max_cm} onChange={(e) => setDriverDraft(v => ({ ...v, largo_max_cm: e.target.value }))} required /></label>
+              
               {tokenError && <p className="staff-error full" role="alert">{tokenError}</p>}
               <div className="full" style={{ marginTop: 12 }}>
                 <Button type="submit" className="btn btn-primary"><KeyRound />Registrar y habilitar acceso</Button>
