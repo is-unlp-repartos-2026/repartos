@@ -91,7 +91,7 @@ function DriverPortal() {
         <>
           <div style={{marginTop: 20, marginBottom: 20, padding: 16, border: "1px solid #ddd", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center",}}>
           <span> Estado actual:
-          <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span><Button onClick={() => token && post({ type: "toggleDisponibilidad", token: token.token, }) } > {miInfo?.activo ? "Ponerse inactivo" : "Ponerse activo"} </Button> </div>
+          <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span><Button onClick={() => token && post({ type: "toggleDisponibilidad", token: token.token, }) } > {miInfo?.activo ? "Finalizar jornada laboral" : "Comenzar jornada laboral"} </Button> </div>
           {mine.length === 0 && ( <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>)}
           <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
             {mine.map((s) => (
@@ -199,7 +199,27 @@ function OperatorPortal() {
   const post = useChannel((m) => { 
     if (!live.current.loggedIn) return;
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
-    if (m.type === "toggleDisponibilidad") { setTokens((rows) => rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t));}
+    if (m.type === "toggleDisponibilidad") {
+  setTokens((rows) => {
+    const updatedTokens = rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t);
+    const rep = updatedTokens.find(t => t.token === m.token);
+    
+    if (rep && rep.activo) {
+      setShipments(currentShipments => {
+        let hasChanges = false;
+        const newShipments = currentShipments.map(s => {
+          if (s.estado === "Registrado" && !s.repartidor && rep.pesoMaxKg >= s.pesoKg) {
+            hasChanges = true;
+            return { ...s, repartidor: rep.token, estado: "Repartidor asignado" };
+          }
+          return s;
+        });
+        return hasChanges ? newShipments : currentShipments;
+      });
+    }
+    return updatedTokens;
+  });
+}
     if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
   });
 
