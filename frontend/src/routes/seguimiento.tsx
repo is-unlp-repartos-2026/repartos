@@ -1,7 +1,23 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Inferior";
 import { Eyebrow } from "@/components/site/Icon";
+
+type Seguimiento = {
+  codigo_seguimiento: string;
+  estado: string;
+  historial: { estado: string; fecha_hora: string }[];
+};
+
+const API_URL = import.meta.env["VITE_API_URL"] ?? "http://127.0.0.1:8000";
+
+async function consultarSeguimiento(codigo: string): Promise<Seguimiento> {
+  const res = await fetch(`${API_URL}/seguimiento/${encodeURIComponent(codigo)}`);
+  if (res.status === 404) throw new Error("NO_ENCONTRADO");
+  if (!res.ok) throw new Error(`HTTP_${res.status}`);
+  return res.json();
+}
 
 export const Route = createFileRoute("/seguimiento")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -20,8 +36,47 @@ export const Route = createFileRoute("/seguimiento")({
   component: SeguimientoPage,
 });
 
+const formatearEstado = (estado: string) => {
+  const texto = estado.replace(/_/g, " ");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+};
+
+const formatearFecha = (iso: string) =>
+  new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+
 function SeguimientoPage() {
   const { guia } = Route.useSearch();
+  const [datos, setDatos] = useState<Seguimiento | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+
+  useEffect(() => {
+    if (!guia) return;
+    let cancelado = false;
+    setCargando(true);
+    setError(null);
+    setDatos(null);
+
+    consultarSeguimiento(guia.trim())
+      .then((d) => {
+        if (!cancelado) setDatos(d);
+      })
+      .catch((err) => {
+        if (cancelado) return;
+        setError(
+          err instanceof Error && err.message === "NO_ENCONTRADO"
+            ? "No encontramos ningún envío con ese número de guía."
+            : "No pudimos consultar el envío. Intentá de nuevo en unos minutos.",
+        );
+      })
+      .finally(() => {
+        if (!cancelado) setCargando(false);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [guia]);
 
   return (
     <div className="site">
@@ -37,11 +92,20 @@ function SeguimientoPage() {
               <p className="lead">No ingresaste un número de guía. Podés consultar nuevamente desde la página principal.</p>
             )}
             <div className="form" style={{ marginTop: 32 }}>
-              <h3>Próximamente</h3>
-              <p className="fsub">
-                Acá se mostrará el estado del pedido con su recorrido y fechas. Cuando definas los estados del envío y la base de datos
-                a utilizar, esta página se conectará para mostrar la información real.
-              </p>
+              {cargando && <p className="fsub">Consultando el estado de tu envío...</p>}
+              {error && <p className="fsub">{error}</p>}
+              {datos && (
+                <>
+                  <h3>Estado actual: {formatearEstado(datos.estado)}</h3>
+                  <ul style={{ marginTop: 18, paddingLeft: 18 }}>
+                    {datos.historial.map((h, i) => (
+                      <li key={i}>
+                        <strong>{formatearEstado(h.estado)}</strong> — {formatearFecha(h.fecha_hora)}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
               <Link to="/" className="btn btn-primary" style={{ display: "inline-block", marginTop: 18 }}>Volver al inicio</Link>
             </div>
           </div>
