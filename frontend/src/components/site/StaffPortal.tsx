@@ -220,15 +220,7 @@ function OperatorPortal() {
   const post = useChannel((m) => {
     if (!live.current.loggedIn) return;
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
-    if (m.type === "decide") {
-      setShipments((rows) =>
-        rows.map((s) =>
-          s.guia === m.guia
-            ? { ...s, estado: m.estado }
-            : s
-        )
-      );
-    }
+    if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
   });
 
   useEffect(() => {
