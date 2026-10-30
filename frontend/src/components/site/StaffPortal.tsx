@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { loginOperario, CredencialesInvalidasError } from "@/lib/api";
+import { loginOperario, loginRepartidor, getSesionRepartidor, CredencialesInvalidasError } from "@/lib/api";
 import { ArrowRight, Check, KeyRound, LogOut, PackagePlus, Trash2, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Header } from "./Header";
@@ -9,6 +9,7 @@ import {
   type DemoMessage, type DriverToken, type Shipment, type ShipmentInput,
 } from "@/lib/shipment-demo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
 
 
 type Draft = ShipmentInput;
@@ -48,73 +49,86 @@ function Shell({ role, title, onLogout, children }: { role: string; title: strin
 }
 
 function DriverPortal() {
-  const [token, setToken] = useState<DriverToken | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  // Reemplazamos el token simulado por el perfil real del backend
+  const [repartidor, setRepartidor] = useState<any>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [state, setState] = useState<{ tokens: DriverToken[]; shipments: Shipment[] } | null>(null);
-  const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Shipment | null>(null);
   
+  // Mantenemos el estado de pedidos temporalmente (aunque quedará vacío hasta integrar la API de pedidos)
+  const [state, setState] = useState<{ shipments: Shipment[] } | null>(null);
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Shipment | null>(null);
   const [avisoFinJornada, setAvisoFinJornada] = useState("");
 
-  const post = useChannel((m) => { if (m.type === "sync") setState({ tokens: m.tokens, shipments: m.shipments }); });
+  const post = useChannel((m) => { if (m.type === "sync") setState({ shipments: m.shipments }); });
 
+  // HU-34: Cargar sesión guardada al abrir la aplicación
   useEffect(() => {
-    if (!pending) return;
-    const t = state?.tokens.find((x) => x.token === pending);
-    if (t) { setToken(t); setPending(null); setError(""); return; }
-    const timer = setTimeout(() => { setPending(null); setError("Token inválido o dado de baja."); }, 800);
-    return () => clearTimeout(timer);
-  }, [pending, state]);
+    const tokenGuardado = localStorage.getItem("repartidorToken");
+    if (tokenGuardado) {
+      setPending(true);
+      getSesionRepartidor(tokenGuardado)
+        .then((perfil: any) => setRepartidor(perfil))
+        .catch((err: any) => {
+          localStorage.removeItem("repartidorToken");
+          setError(err.message);
+        })
+        .finally(() => setPending(false));
+    }
+  }, []);
 
-  useEffect(() => { if (token && state && !state.tokens.some((t) => t.token === token.token)) { setToken(null); setError("Tu token fue dado de baja."); } }, [state, token]);
-
-  function login(e: FormEvent<HTMLFormElement>) {
+  async function login(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const tVal = new FormData(e.currentTarget).get("token")?.toString().toUpperCase() ?? "";
-    if (tVal.length !== 4) { setError("El token debe tener 4 caracteres."); return; }
-    setError(""); setPending(tVal); post({ type: "request" });
+    const codigo = new FormData(e.currentTarget).get("token")?.toString().toUpperCase() ?? "";
+    if (codigo.length !== 4) { setError("El código debe tener 4 caracteres."); return; }
+    
+    setPending(true);
+    setError("");
+    
+    try {
+      const resLogin = await loginRepartidor(codigo);
+      localStorage.setItem("repartidorToken", resLogin.token); // Guardamos la sesión en el dispositivo
+      
+      const perfil = await getSesionRepartidor(resLogin.token); // Buscamos los datos de ese token
+      setRepartidor(perfil);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPending(false);
+    }
   }
 
-  const mine = token && state ? state.shipments.filter((s) => s.repartidor === token.token) : [];
-  const miInfo = token && state ? state.tokens.find((t) => t.token === token.token): null;
-  
-function handleToggleDisponibilidad() {
-    if (!token || !miInfo) return;
-    setAvisoFinJornada("");
+  function logout() {
+    localStorage.removeItem("repartidorToken");
+    setRepartidor(null);
+  }
 
-    if (miInfo.activo) {
-      const pedidosEnCurso = mine.some(s => 
-        ["Pendiente de aceptación", "Aceptado", "En camino"].includes(s.estado)
-      );
-      
-      if (pedidosEnCurso) {
-        setAvisoFinJornada("No podés finalizar tu jornada porque tenés pedidos en curso. Primero debés finalizar tus entregas o rechazarlas.");
-        return;
-      }
-    }
-    
-    post({ type: "toggleDisponibilidad", token: token.token });
+  // Al usar el backend real, el ID será un número entero. 
+  // Las guías de prueba usan "RP01", por lo que esta lista se verá vacía hasta que se conecte el backend de envíos.
+  const mine = repartidor && state ? state.shipments.filter((s) => s.repartidor === repartidor.id?.toString()) : [];
+  
+  function handleToggleDisponibilidad() {
+    alert("Para cambiar la disponibilidad hay que integrar HU-13 (Comenzar jornada) y HU-14 (Terminar jornada).");
   }
   
   return (
-    <Shell role="Repartidor" title={token ? `Mis entregas - ${token.nombre}` : "Acceso de repartidor"} onLogout={token ? () => setToken(null) : undefined}>
-      {!token ? (
+    <Shell role="Repartidor" title={repartidor ? `Mis entregas - ${repartidor.nombre}` : "Acceso de repartidor"} onLogout={repartidor ? logout : undefined}>
+      {!repartidor ? (
         <form className="form staff-login" onSubmit={login} noValidate>
-          <h2>Ingresá tu token</h2>
+          <h2>Ingresá tu código</h2>
           <div className="fgrid">
-            <label className="full">Token de 4 caracteres
+            <label className="full">Código de acceso (4 caracteres)
               <input name="token" maxLength={4} autoComplete="off" style={{ textTransform: "uppercase", letterSpacing: "0.3em" }} required />
             </label>
           </div>
           {error && <p className="staff-error" role="alert">{error}</p>}
-          <Button className="btn btn-primary staff-submit" type="submit" disabled={!!pending}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
+          <Button className="btn btn-primary staff-submit" type="submit" disabled={pending}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
         </form>
       ) : (
         <>
           <div style={{marginTop: 20, marginBottom: avisoFinJornada ? 0 : 20, padding: 16, border: "1px solid #ddd", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center",}}>
-            <span> Estado actual: <strong style={{ marginLeft: 8 }}> {miInfo?.activo ? "Activo" : "Inactivo"} </strong> </span>
+            <span> Estado actual: <strong style={{ marginLeft: 8 }}> {repartidor.activo ? "Activo" : "Inactivo"} </strong> </span>
             <Button onClick={handleToggleDisponibilidad} > 
-              {miInfo?.activo ? "Finalizar jornada laboral" : "Comenzar jornada laboral"} 
+              {repartidor.activo ? "Finalizar jornada laboral" : "Comenzar jornada laboral"} 
             </Button> 
           </div>
           
@@ -122,7 +136,7 @@ function handleToggleDisponibilidad() {
             <p className="staff-error" style={{ marginBottom: 20, marginTop: 8 }} role="alert">{avisoFinJornada}</p>
           )}
 
-          {mine.length === 0 && ( <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados.</p>)}
+          {mine.length === 0 && ( <p className="demo-notice" style={{ marginTop: 24 }}>No tenés pedidos asignados. (Pendiente conectar con backend de envíos).</p>)}
           
           <div style={{ display: "grid", gap: 16, marginTop: 20 }}>
             {mine.map((s) => (
@@ -137,93 +151,10 @@ function handleToggleDisponibilidad() {
                 </dl>
                 <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <Button variant="outline" size="sm" onClick={() => setPedidoSeleccionado(s)}>Ver detalle</Button>
-                  
-                  {s.estado === "Pendiente de aceptación" && (
-                    <div className="staff-actions" onClick={(e) => e.stopPropagation()}>
-                      <Button className="btn btn-primary" size="sm" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Aceptado" })}><Check />Aceptar</Button>
-                      <Button variant="outline" size="sm" className="staff-secondary" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Rechazado" })}><X />Rechazar</Button>
-                    </div>
-                  )}
-
-                  {/* HU 46: Botón exclusivo para retirar pedido */}
-                  {(s.estado === "Aceptado" || s.estado === "Repartidor asignado") && (
-                    <div className="staff-actions" onClick={(e) => e.stopPropagation()}>
-                       <Button className="btn btn-primary" size="sm" onClick={() => {
-                          const now = new Date();
-                          const fechaHoraStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                          post({ type: "decide", token: token.token, guia: s.guia, estado: "En camino", fechaRetiro: fechaHoraStr });
-                       }}><Truck />Retirar pedido</Button>
-                    </div>
-                  )}
                 </div>
               </article>
             ))}
           </div>
-
-          <Dialog open={!!pedidoSeleccionado} onOpenChange={(open) => !open && setPedidoSeleccionado(null)}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Detalle del pedido {pedidoSeleccionado?.guia}</DialogTitle>
-              <DialogDescription>
-                Información de entrega y carga asignada.
-              </DialogDescription>
-            </DialogHeader>
-            {pedidoSeleccionado && (
-              <div style={{ display: "grid", gap: 16, marginTop: 8 }}>
-                <dl className="shipment-details" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div><dt>Origen</dt><dd>{pedidoSeleccionado.origen}</dd></div>
-                  <div><dt>Destino</dt><dd>{pedidoSeleccionado.destino}</dd></div>
-                  <div><dt>Receptor</dt><dd>{pedidoSeleccionado.destinatario}</dd></div>
-                  <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.documentoReceptor}</dd></div>
-                  <div><dt>Peso</dt><dd>{pedidoSeleccionado.pesoKg} kg</dd></div>
-                  <div><dt>Dimensiones</dt><dd>{pedidoSeleccionado.dimensiones}</dd></div>
-                  {/* HU 46: Mostrar fecha y hora de retiro si está en camino */}
-                  {pedidoSeleccionado.fechaRetiro && (
-                    <div style={{ gridColumn: "1 / -1", borderTop: "1px dashed #ccc", paddingTop: 8 }}>
-                       <dt style={{ color: "var(--m-blue)" }}>Retirado el:</dt><dd>{pedidoSeleccionado.fechaRetiro}</dd>
-                    </div>
-                  )}
-                </dl>
-                {pedidoSeleccionado.estado !== "Pendiente de aceptación" && pedidoSeleccionado.estado !== "Aceptado" && pedidoSeleccionado.estado !== "Repartidor asignado" && (
-                  <form 
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
-                      const nuevoEstado = formData.get("estado") as string;
-                      if (token) {
-                        post({ type: "decide", token: token.token, guia: pedidoSeleccionado.guia, estado: nuevoEstado });
-                      }
-                      setPedidoSeleccionado(null);
-                    }}
-                    style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}
-                  >
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
-                      Actualizar estado del pedido
-                      <select
-                        name="estado"
-                        defaultValue={pedidoSeleccionado.estado}
-                        style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #ccc" }}
-                      >
-                        <option value="En camino">En camino</option>
-                        <option value="Entregado">Entregado con éxito</option>
-                        <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
-                      </select>
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
-                      Motivo de la falla (Obligatorio si la entrega es fallida)
-                      <textarea 
-                        rows={2} 
-                        placeholder="Ej: Destinatario ausente, dirección incorrecta..."
-                        style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
-                      />
-                    </label>
-                    <Button type="submit" className="btn btn-primary">Guardar cambios</Button>
-                  </form>
-                )}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
         </>
       )}
     </Shell>
