@@ -48,7 +48,7 @@ def verificar_contrasena(contrasena: str, hash_guardado: str) -> bool:
 
 # Sin 0/O ni 1/I/L: se tipean en el celular y no tienen que confundirse.
 _ALFABETO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-LARGO_CODIGO_ACCESO = 8  # 31^8 ≈ 850 mil millones de códigos posibles
+LARGO_CODIGO_ACCESO = 4 
 LARGO_CODIGO_SEGUIMIENTO = 8
 
 
