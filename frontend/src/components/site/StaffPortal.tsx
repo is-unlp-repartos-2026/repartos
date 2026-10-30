@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { loginOperario } from "@/lib/api";
+import { loginOperario, CredencialesInvalidasError } from "@/lib/api";
 import { ArrowRight, Check, KeyRound, LogOut, PackagePlus, Trash2, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Header } from "./Header";
@@ -9,6 +9,7 @@ import {
   type DemoMessage, type DriverToken, type Shipment, type ShipmentInput,
 } from "@/lib/shipment-demo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
 
 type Draft = ShipmentInput;
 const emptyShipment: Draft = { origen: "", destino: "", destinatario: "", documentoReceptor: "", pesoKg: 0, dimensiones: "" };
@@ -315,26 +316,21 @@ function OperatorPortal() {
 
 async function login(e: FormEvent<HTMLFormElement>) {
   e.preventDefault();
-
-  const f = new FormData(e.currentTarget);
+  const form = e.currentTarget;
+  const f = new FormData(form);
 
   try {
-    const response = await loginOperario(
-      String(f.get("usuario")),
-      String(f.get("password"))
-    );
-
-    localStorage.setItem(
-      "token",
-      response.token
-    );
-
+    const response = await loginOperario(String(f.get("usuario")), String(f.get("password")));
+    localStorage.setItem("token", response.token);
     setError("");
-    e.currentTarget.reset();
+    form.reset();
     setLoggedIn(true);
-
-  } catch {
-    setError("Usuario o contraseña incorrectos.");
+  } catch (err) {
+    setError(
+      err instanceof CredencialesInvalidasError
+        ? "Usuario o contraseña incorrectos."
+        : "No se pudo conectar con el servidor. Intentá de nuevo."
+    );
   }
 }
 
