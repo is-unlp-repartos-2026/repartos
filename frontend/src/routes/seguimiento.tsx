@@ -3,21 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Inferior";
 import { Eyebrow } from "@/components/site/Icon";
-
-type Seguimiento = {
-  codigo_seguimiento: string;
-  estado: string;
-  historial: { estado: string; fecha_hora: string }[];
-};
-
-const API_URL = import.meta.env["VITE_API_URL"] ?? "http://127.0.0.1:8000";
-
-async function consultarSeguimiento(codigo: string): Promise<Seguimiento> {
-  const res = await fetch(`${API_URL}/seguimiento/${encodeURIComponent(codigo)}`);
-  if (res.status === 404) throw new Error("NO_ENCONTRADO");
-  if (!res.ok) throw new Error(`HTTP_${res.status}`);
-  return res.json();
-}
+import { ApiError, consultarSeguimiento, type Seguimiento } from "@/lib/api";
 
 export const Route = createFileRoute("/seguimiento")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -64,7 +50,7 @@ function SeguimientoPage() {
       .catch((err) => {
         if (cancelado) return;
         setError(
-          err instanceof Error && err.message === "NO_ENCONTRADO"
+          err instanceof ApiError && err.status === 404
             ? "No encontramos ningún envío con ese número de guía."
             : "No pudimos consultar el envío. Intentá de nuevo en unos minutos.",
         );
