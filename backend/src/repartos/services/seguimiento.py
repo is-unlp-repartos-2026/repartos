@@ -11,6 +11,9 @@ def consultar_estado(db: Session, codigo: str) -> EstadoDelPedido:
     """HU-21: estado actual e historial (con fecha y hora) del pedido con ese código de seguimiento."""
     # Los códigos se generan en mayúsculas: así "ab3k..." también se encuentra.
     pedido = pedidos.buscar_por_codigo_seguimiento(db, codigo.strip().upper())
+    print("CODIGO RECIBIDO:", codigo)
+    print("CODIGO BUSCADO:", codigo.strip().upper())
+    print("PEDIDO ENCONTRADO:", pedido)
     if pedido is None:
         raise PedidoNoEncontrado
 
