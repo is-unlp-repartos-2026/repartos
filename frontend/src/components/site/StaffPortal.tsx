@@ -52,7 +52,6 @@ function DriverPortal() {
   const [state, setState] = useState<{ tokens: DriverToken[]; shipments: Shipment[] } | null>(null);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState<Shipment | null>(null);
   
-  // Estado para la HU 54: aviso de error al intentar finalizar jornada
   const [avisoFinJornada, setAvisoFinJornada] = useState("");
 
   const post = useChannel((m) => { if (m.type === "sync") setState({ tokens: m.tokens, shipments: m.shipments }); });
@@ -82,7 +81,6 @@ function handleToggleDisponibilidad() {
     setAvisoFinJornada("");
 
     if (miInfo.activo) {
-      // Bloquear si hay pedidos que no estén finalizados
       const pedidosEnCurso = mine.some(s => 
         ["Pendiente de aceptación", "Aceptado", "En camino"].includes(s.estado)
       );
@@ -137,10 +135,22 @@ function handleToggleDisponibilidad() {
                 </dl>
                 <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <Button variant="outline" size="sm" onClick={() => setPedidoSeleccionado(s)}>Ver detalle</Button>
+                  
                   {s.estado === "Pendiente de aceptación" && (
                     <div className="staff-actions" onClick={(e) => e.stopPropagation()}>
                       <Button className="btn btn-primary" size="sm" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Aceptado" })}><Check />Aceptar</Button>
                       <Button variant="outline" size="sm" className="staff-secondary" onClick={() => post({ type: "decide", token: token.token, guia: s.guia, estado: "Rechazado" })}><X />Rechazar</Button>
+                    </div>
+                  )}
+
+                  {/* HU 46: Botón exclusivo para retirar pedido */}
+                  {(s.estado === "Aceptado" || s.estado === "Repartidor asignado") && (
+                    <div className="staff-actions" onClick={(e) => e.stopPropagation()}>
+                       <Button className="btn btn-primary" size="sm" onClick={() => {
+                          const now = new Date();
+                          const fechaHoraStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          post({ type: "decide", token: token.token, guia: s.guia, estado: "En camino", fechaRetiro: fechaHoraStr });
+                       }}><Truck />Retirar pedido</Button>
                     </div>
                   )}
                 </div>
@@ -165,8 +175,14 @@ function handleToggleDisponibilidad() {
                   <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.documentoReceptor}</dd></div>
                   <div><dt>Peso</dt><dd>{pedidoSeleccionado.pesoKg} kg</dd></div>
                   <div><dt>Dimensiones</dt><dd>{pedidoSeleccionado.dimensiones}</dd></div>
+                  {/* HU 46: Mostrar fecha y hora de retiro si está en camino */}
+                  {pedidoSeleccionado.fechaRetiro && (
+                    <div style={{ gridColumn: "1 / -1", borderTop: "1px dashed #ccc", paddingTop: 8 }}>
+                       <dt style={{ color: "var(--m-blue)" }}>Retirado el:</dt><dd>{pedidoSeleccionado.fechaRetiro}</dd>
+                    </div>
+                  )}
                 </dl>
-                {pedidoSeleccionado.estado !== "Pendiente de aceptación" && (
+                {pedidoSeleccionado.estado !== "Pendiente de aceptación" && pedidoSeleccionado.estado !== "Aceptado" && pedidoSeleccionado.estado !== "Repartidor asignado" && (
                   <form 
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -186,7 +202,6 @@ function handleToggleDisponibilidad() {
                         defaultValue={pedidoSeleccionado.estado}
                         style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #ccc" }}
                       >
-                        <option value="Aceptado">Aceptado</option>
                         <option value="En camino">En camino</option>
                         <option value="Entregado">Entregado con éxito</option>
                         <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
@@ -250,7 +265,6 @@ function OperatorPortal() {
         
         if (rep) {
           if (rep.activo) {
-            // El repartidor pasa a ACTIVO - Asignarle pedidos registrados aptos (HU 42)
             setShipments(currentShipments => {
               let hasChanges = false;
               const newShipments = currentShipments.map(s => {
@@ -263,14 +277,11 @@ function OperatorPortal() {
               return hasChanges ? newShipments : currentShipments;
             });
           } else {
-            // El repartidor pasa a INACTIVO - HU 54: Reasignar pedidos "Repartidor asignado"
             setShipments(currentShipments => {
               let hasChanges = false;
               const newShipments = currentShipments.map(s => {
                 if (s.repartidor === rep.token && s.estado === "Repartidor asignado") {
                   hasChanges = true;
-                  
-                  // Buscar otro repartidor apto y activo
                   const aptos = updatedTokens.filter(t => t.habilitado && t.activo && t.pesoMaxKg >= s.pesoKg);
                   
                   if (aptos.length > 0) {
@@ -289,7 +300,12 @@ function OperatorPortal() {
       });
     }
     
-    if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
+    // HU 46: Atajar la nueva propiedad fechaRetiro y volcarla al estado de la demo
+    if (m.type === "decide") {
+      setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token 
+        ? { ...s, estado: m.estado, ...(m.fechaRetiro ? { fechaRetiro: m.fechaRetiro } : {}) } 
+        : s));
+    }
   });
 
   useEffect(() => {
@@ -342,7 +358,6 @@ function OperatorPortal() {
     const guiaNueva = generateTrackingCode(shipments.map(s => s.guia));
     const pesoRequerido = r.data.pesoKg;
     
-    // Lógica de asignación automática
     const aptos = tokens.filter(t => t.habilitado && t.activo && t.pesoMaxKg >= pesoRequerido);
     
     if (aptos.length > 0) {
@@ -518,6 +533,7 @@ function OperatorPortal() {
                     <td>
                       <span className="staff-status">{s.estado}</span>
                       {s.repartidor && <small style={{display: "block", marginTop: 6, color: "var(--m-muted)"}}>{driverLabel(s.repartidor)}</small>}
+                      {s.fechaRetiro && <small style={{display: "block", marginTop: 4, color: "var(--m-blue)", fontSize: "0.75rem"}}>Retirado: {s.fechaRetiro}</small>}
                     </td>
                   </tr>
                 ))}

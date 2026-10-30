@@ -15,7 +15,12 @@ export const shipmentSchema = z.object({
   dimensiones: z.string().trim().min(1, "Completá las dimensiones del paquete.").max(100),
 });
 export type ShipmentInput = z.infer<typeof shipmentSchema>;
-export type Shipment = ShipmentInput & { guia: string; estado: string; repartidor?: string | undefined };
+export type Shipment = ShipmentInput & { 
+  guia: string; 
+  estado: string; 
+  repartidor?: string | undefined;
+  fechaRetiro?: string | undefined;
+};
 
 export const demoShipments: Shipment[] = [
   { guia: "Y7X2-K9M4", origen: "Av. 1 y Calle 47, La Plata", destino: "Av. Corrientes 1200, CABA", destinatario: "Cliente de ejemplo", documentoReceptor: "11222333", pesoKg: 4.5, dimensiones: "35 x 25 x 20 cm", estado: "Pendiente de aceptación", repartidor: "RP01" },
@@ -61,5 +66,5 @@ export const DEMO_CHANNEL = "siger-demo-staff";
 export type DemoMessage =
   | { type: "request" }
   | { type: "sync"; tokens: DriverToken[]; shipments: Shipment[] }
-  | { type: "decide"; token: string; guia: string; estado: string }
+  | { type: "decide"; token: string; guia: string; estado: string; fechaRetiro?: string }
   | { type: "toggleDisponibilidad"; token: string };
