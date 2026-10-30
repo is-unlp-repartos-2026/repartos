@@ -190,11 +190,28 @@ def buscar_por_id(db: Session, pedido_id: int) -> RowMapping | None:
     return resultado.mappings().first()
 
 
-def buscar_por_codigo_seguimiento(db: Session, codigo: str) -> RowMapping | None:
+def buscar_por_codigo_seguimiento(db: Session, codigo: str):
     resultado = db.execute(
-        text(f"SELECT {_COLUMNAS} FROM pedidos WHERE codigo_seguimiento = :codigo"),
+        text(
+            "SELECT id, codigo_seguimiento "
+            "FROM pedidos"
+        )
+    )
+
+    filas = list(resultado.mappings())
+
+    print("CODIGO BUSCADO:", codigo)
+    print("PEDIDOS EN BD:", filas)
+
+    resultado = db.execute(
+        text(
+            f"SELECT {_COLUMNAS} "
+            "FROM pedidos "
+            "WHERE codigo_seguimiento = :codigo"
+        ),
         {"codigo": codigo},
     )
+
     return resultado.mappings().first()
 
 
