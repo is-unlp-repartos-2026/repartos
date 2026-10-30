@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { loginOperario } from "@/lib/api";
 import { ArrowRight, Check, KeyRound, LogOut, PackagePlus, Trash2, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Header } from "./Header";
