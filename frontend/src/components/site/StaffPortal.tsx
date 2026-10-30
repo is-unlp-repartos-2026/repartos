@@ -131,10 +131,12 @@ function DriverPortal() {
                   <div><dt>Origen</dt><dd>{pedidoSeleccionado.origen}</dd></div>
                   <div><dt>Destino</dt><dd>{pedidoSeleccionado.destino}</dd></div>
                   <div><dt>Receptor</dt><dd>{pedidoSeleccionado.destinatario}</dd></div>
-                  <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.documentoReceptor}</dd></div>
-                  <div><dt>Peso</dt><dd>{pedidoSeleccionado.pesoKg} kg</dd></div>
-                  <div><dt>Dimensiones</dt><dd>{pedidoSeleccionado.dimensiones}</dd></div>
+                  <div><dt>Documento receptor</dt><dd>{pedidoSeleccionado.telefono}</dd></div>
+                  <div><dt>Peso</dt><dd>4.5 kg</dd></div>
+                  <div><dt>Dimensiones</dt><dd>35 x 25 x 20 cm</dd></div>
                 </dl>
+
+                {/* Avanzar estado / Registrar entrega fallida */}
                 {pedidoSeleccionado.estado !== "Pendiente de aceptación" && (
                   <div style={{ borderTop: "1px solid #eaeaea", paddingTop: 16, display: "grid", gap: 12 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
@@ -149,6 +151,7 @@ function DriverPortal() {
                         <option value="Entrega fallida">Entrega fallida (No se pudo entregar)</option>
                       </select>
                     </label>
+
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, fontWeight: 500, fontSize: 14 }}>
                       Motivo de la falla (Obligatorio si la entrega es fallida)
                       <textarea 
@@ -157,7 +160,25 @@ function DriverPortal() {
                         style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
                       />
                     </label>
-                    <Button className="btn btn-primary" onClick={() => setPedidoSeleccionado(null)}>Guardar cambios</Button>
+
+                    <Button 
+                className="btn btn-primary"
+                onClick={() => {
+                  const selectElement = document.getElementById("select-estado-avance") as HTMLSelectElement;
+                  const nuevoEstado = selectElement ? selectElement.value : pedidoSeleccionado.estado;
+
+                  post({
+                    type: "decide",
+                    token: token!.token,
+                    guia: pedidoSeleccionado.guia,
+                    estado: nuevoEstado
+                  });
+
+                  setPedidoSeleccionado(null);
+                }}
+              >
+                Guardar cambios
+              </Button>
                   </div>
                 )}
               </div>
@@ -196,11 +217,18 @@ function OperatorPortal() {
   const live = useRef({ tokens, shipments, loggedIn });
   live.current = { tokens, shipments, loggedIn };
 
-  const post = useChannel((m) => { 
+  const post = useChannel((m) => {
     if (!live.current.loggedIn) return;
     if (m.type === "request") post({ type: "sync", tokens: live.current.tokens, shipments: live.current.shipments });
-    if (m.type === "toggleDisponibilidad") { setTokens((rows) => rows.map((t) => t.token === m.token ? { ...t, activo: !t.activo } : t));}
-    if (m.type === "decide") setShipments((rows) => rows.map((s) => s.guia === m.guia && s.repartidor === m.token ? { ...s, estado: m.estado } : s));
+    if (m.type === "decide") {
+      setShipments((rows) =>
+        rows.map((s) =>
+          s.guia === m.guia
+            ? { ...s, estado: m.estado }
+            : s
+        )
+      );
+    }
   });
 
   useEffect(() => {
