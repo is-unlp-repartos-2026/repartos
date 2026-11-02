@@ -2,7 +2,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { z } from "zod";
 import { Eyebrow } from "./Icon";
 import { nav } from "./data";
-import { trackingGuideSchema } from "@/lib/shipment-demo";
+import { BuscadorGuia } from "./BuscadorGuia";
 import { Button } from "@/components/ui/button";
 
 const soloTexto = (campo: string) =>
@@ -42,21 +42,6 @@ type Errores = Partial<Record<keyof Consulta, string>>;
 const WHATSAPP_CONSULTAS = "5493446505697";
 
 export function Seguimiento() {
-  const [guia, setGuia] = useState("");
-  const [errorGuia, setErrorGuia] = useState("");
-
-  const abrirSeguimiento = (e: FormEvent) => {
-    e.preventDefault();
-    const resultado = trackingGuideSchema.safeParse(guia);
-    if (!resultado.success) {
-      setErrorGuia(resultado.error.issues[0]?.message ?? "Ingresá el número de guía.");
-      return;
-    }
-    setErrorGuia("");
-    const url = `/seguimiento?guia=${encodeURIComponent(resultado.data)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
   return (
     <section className="sec sec-white" id="seguimiento">
       <div className="container contact-grid">
@@ -65,15 +50,10 @@ export function Seguimiento() {
           <h2 className="h2 big">Consultar estado de mi envío.</h2>
           <p className="lead">Ingresá el número de guía o seguimiento para conocer en qué etapa se encuentra tu envío.</p>
         </div>
-        <form className="form" onSubmit={abrirSeguimiento} noValidate>
+        <BuscadorGuia>
           <h3>Seguí tu envío</h3>
           <p className="fsub">El número figura en el comprobante entregado al despachar.</p>
-          <div className="fgrid">
-            <label className="full">Número de guía<input required maxLength={100} aria-invalid={!!errorGuia} aria-describedby={errorGuia ? "guia-error" : undefined} placeholder="Ej: 000123456" value={guia} onChange={(e) => setGuia(e.target.value)} />{errorGuia && <span className="err" role="alert" id="guia-error">{errorGuia}</span>}</label>
-          </div>
-          <p className="hint">Si tenés dudas, comunicate con nuestra Casa Central.</p>
-          <Button type="submit" className="btn btn-primary">Consultar estado</Button>
-        </form>
+        </BuscadorGuia>
       </div>
     </section>
   );

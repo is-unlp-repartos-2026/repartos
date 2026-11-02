@@ -27,7 +27,7 @@ function Index() {
       <Header />
       <main>
         <Hero />
-        <div className="staff-entry-band"><div className="container staff-entry"><Button asChild variant="outline" className="staff-secondary"><Link to="/repartidor" target="_blank" rel="noopener noreferrer"><Truck />Soy repartidor</Link></Button><Button asChild variant="outline" className="staff-secondary"><Link to="/operario" target="_blank" rel="noopener noreferrer"><ClipboardList />Operario</Link></Button></div></div>
+        <div className="staff-entry-band"><div className="container staff-entry"><Button asChild variant="outline" className="staff-secondary"><Link to="/repartidor"><Truck />Soy repartidor</Link></Button><Button asChild variant="outline" className="staff-secondary"><Link to="/operario"><ClipboardList />Operario</Link></Button></div></div>
         <Destacados />
         <Servicios />
         <Cobertura />
