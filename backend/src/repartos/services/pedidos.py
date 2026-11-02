@@ -1,23 +1,27 @@
 """Reglas de los pedidos del lado del operario (HU-04 Registrar, HU-06 Cancelar, HU-23 Consultar detalle,
-HU-22 Monitorear pedidos en curso, HU-08 Reasignar pedido)."""
+HU-22 Monitorear pedidos en curso, HU-08 Reasignar pedido, HU-05 Modificar pedido, HU-24 Historial)."""
 
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from repartos.core import fechas
 from repartos.core.config import settings
 from repartos.core.security import generar_codigo_seguimiento
 from repartos.models import EstadoPedido
-from repartos.repositories import cambios_estado, pedidos
+from repartos.repositories import cambios_estado, pedidos, repartidores
 from repartos.schemas.pedidos import (
     CambioDeEstadoOperario,
     DatosNuevoPedido,
     DatosReasignacion,
     DetallePedidoOperario,
     EstadoActualizado,
+    PedidoEnHistorial,
     PedidoEnTablero,
     PedidoRegistrado,
     RepartidorDelPedido,
+    ResultadoModificacion,
     ResultadoReasignacion,
     Tablero,
 )
@@ -29,6 +33,10 @@ class PedidoNoEncontrado(Exception):
 
 class EstadoNoPermitido(Exception):
     """El pedido no está en un estado que permita esa acción."""
+
+
+class PeriodoInvalido(Exception):
+    """La fecha "desde" es posterior a la fecha "hasta"."""
 
 
 AVISO_SIN_REPARTIDOR = (
@@ -114,6 +122,7 @@ def detalle_pedido(db: Session, pedido_id: int) -> DetallePedidoOperario:
             fecha_hora=c["fecha_hora"],
             repartidor=_repartidor(c["repartidor_id"], c["repartidor_nombre"]),
             detalle=c["detalle"],
+            modificacion=c["modificacion"],
         )
         for c in cambios_estado.listar_de_pedido(db, pedido_id)
     ]
@@ -179,3 +188,100 @@ def reasignar_pedido(db: Session, pedido_id: int, datos: DatosReasignacion) -> R
     return ResultadoReasignacion(
         id=pedido_id, estado=EstadoPedido.REPARTIDOR_ASIGNADO, repartidor=RepartidorDelPedido(**nuevo)
     )
+
+
+# Nombre de cada dato del pedido tal como se lee en el historial ("Datos modificados: destino, peso").
+_DATOS_DEL_PEDIDO = {
+    "origen": "origen",
+    "destino": "destino",
+    "receptor_nombre": "nombre de quien recibe",
+    "receptor_dni": "DNI de quien recibe",
+    "peso_kg": "peso",
+    "alto_cm": "alto",
+    "ancho_cm": "ancho",
+    "largo_cm": "largo",
+}
+_MEDIDAS = ("peso_kg", "alto_cm", "ancho_cm", "largo_cm")
+
+
+def _puede_llevarlo(repartidor: dict, pedido: dict) -> bool:
+    return (
+        pedido["peso_kg"] <= repartidor["peso_max_kg"]
+        and pedido["alto_cm"] <= repartidor["alto_max_cm"]
+        and pedido["ancho_cm"] <= repartidor["ancho_max_cm"]
+        and pedido["largo_cm"] <= repartidor["largo_max_cm"]
+    )
+
+
+def modificar_pedido(db: Session, pedido_id: int, datos: DatosNuevoPedido) -> ResultadoModificacion:
+    """HU-05: hasta "repartidor asignado" inclusive. La corrección queda en el historial.
+
+    Si cambian el peso o las medidas, se reevalúa la asignación:
+    - con repartidor: si ya no puede llevarlo, se reasigna a otro apto (o vuelve a "registrado" con aviso);
+    - sin repartidor: se intenta asignar (quizás ahora entra en la capacidad de alguien).
+    """
+    pedido = pedidos.buscar_por_id_y_bloquear(db, pedido_id)
+    if pedido is None:
+        raise PedidoNoEncontrado
+    if pedido["estado"] not in (EstadoPedido.REGISTRADO, EstadoPedido.REPARTIDOR_ASIGNADO):
+        raise EstadoNoPermitido
+
+    nuevos = datos.model_dump()
+    for campo in ("origen", "destino", "receptor_nombre"):
+        nuevos[campo] = nuevos[campo].strip()
+    cambiados = [campo for campo in _DATOS_DEL_PEDIDO if nuevos[campo] != pedido[campo]]
+
+    aviso = None
+    if cambiados:
+        pedidos.modificar_datos(db, pedido_id, **nuevos)
+        cambios_estado.insertar(
+            db,
+            pedido_id,
+            pedido["estado"],
+            repartidor_id=pedido["repartidor_id"],
+            detalle="Datos modificados: " + ", ".join(_DATOS_DEL_PEDIDO[c] for c in cambiados),
+            modificacion=True,
+        )
+
+        if any(campo in _MEDIDAS for campo in cambiados):
+            modificado = pedidos.buscar_por_id(db, pedido_id)  # ya con el peso y las medidas nuevas
+            if pedido["repartidor_id"] is None:
+                if asignacion.asignar(db, modificado) is None:
+                    aviso = AVISO_SIN_REPARTIDOR
+            else:
+                actual = repartidores.buscar_por_id(db, pedido["repartidor_id"])
+                if not _puede_llevarlo(actual, modificado):
+                    motivo = f"{actual['nombre']} no puede llevar el pedido modificado"
+                    if asignacion.reasignar(db, modificado, actual["id"], motivo=motivo) is None:
+                        aviso = AVISO_SIN_OTRO_REPARTIDOR
+        db.commit()
+
+    final = pedidos.buscar_detalle(db, pedido_id)
+    return ResultadoModificacion(
+        id=pedido_id,
+        estado=final["estado"],
+        repartidor=_repartidor(final["repartidor_id"], final["repartidor_nombre"]),
+        aviso=aviso,
+    )
+
+
+def historial(
+    db: Session,
+    desde: date | None = None,
+    hasta: date | None = None,
+    estado: EstadoPedido | None = None,
+    repartidor_id: int | None = None,
+) -> list[PedidoEnHistorial]:
+    """HU-24: por defecto, los pedidos registrados hoy; se puede filtrar por fechas, estado y repartidor."""
+    desde = desde or fechas.hoy()
+    hasta = hasta or fechas.hoy()
+    if desde > hasta:
+        raise PeriodoInvalido
+
+    return [
+        PedidoEnHistorial(
+            **{k: v for k, v in fila.items() if k not in ("repartidor_id", "repartidor_nombre")},
+            repartidor=_repartidor(fila["repartidor_id"], fila["repartidor_nombre"]),
+        )
+        for fila in pedidos.listar_historial(db, desde, hasta, settings.zona_horaria, estado, repartidor_id)
+    ]

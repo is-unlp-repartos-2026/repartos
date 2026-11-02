@@ -1,10 +1,13 @@
 """Endpoints de la interfaz del operario (todos empiezan con /operario)."""
 
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
 from repartos.core.security import OperarioActual
 from repartos.db.session import SesionDB
+from repartos.models import EstadoPedido
 from repartos.repositories import operarios
 from repartos.schemas.auth import CredencialesOperario, OperarioLogueado, SesionIniciada
 from repartos.schemas.pedidos import (
@@ -12,7 +15,9 @@ from repartos.schemas.pedidos import (
     DatosReasignacion,
     DetallePedidoOperario,
     EstadoActualizado,
+    PedidoEnHistorial,
     PedidoRegistrado,
+    ResultadoModificacion,
     ResultadoReasignacion,
     Tablero,
 )
@@ -23,7 +28,8 @@ from repartos.schemas.repartidores import (
     RepartidorDeshabilitado,
     RepartidorRegistrado,
 )
-from repartos.services import auth, pedidos, repartidores
+from repartos.schemas.reportes import Metricas, RendimientoRepartidor
+from repartos.services import auth, pedidos, repartidores, reportes
 
 router = APIRouter(prefix="/operario", tags=["Operario"])
 
@@ -173,3 +179,60 @@ def modificar_habilitacion(
             status_code=status.HTTP_409_CONFLICT,
             detail="El repartidor tiene pedidos en curso: no se puede cambiar su habilitación hasta que los termine",
         )
+
+
+PERIODO_INVALIDO = "La fecha \"desde\" no puede ser posterior a la fecha \"hasta\""
+
+
+@router.get("/pedidos")
+def historial_pedidos(
+    operario_id: OperarioActual,
+    db: SesionDB,
+    desde: date | None = None,
+    hasta: date | None = None,
+    estado: EstadoPedido | None = None,
+    repartidor_id: int | None = None,
+) -> list[PedidoEnHistorial]:
+    """HU-24: el historial de pedidos. Sin filtros, los registrados hoy. Fechas en formato AAAA-MM-DD."""
+    try:
+        return pedidos.historial(db, desde, hasta, estado, repartidor_id)
+    except pedidos.PeriodoInvalido:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=PERIODO_INVALIDO)
+
+
+@router.put("/pedidos/{pedido_id}")
+def modificar_pedido(
+    pedido_id: int, datos: DatosNuevoPedido, operario_id: OperarioActual, db: SesionDB
+) -> ResultadoModificacion:
+    """HU-05: corrige los datos de un pedido todavía no retirado; si cambian peso o medidas, reevalúa la asignación."""
+    try:
+        return pedidos.modificar_pedido(db, pedido_id, datos)
+    except pedidos.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except pedidos.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se puede modificar un pedido registrado o con repartidor asignado",
+        )
+
+
+@router.get("/metricas")
+def metricas(
+    operario_id: OperarioActual, db: SesionDB, desde: date | None = None, hasta: date | None = None
+) -> Metricas:
+    """HU-25: métricas de los pedidos registrados en el período (por defecto, el mes en curso)."""
+    try:
+        return reportes.metricas(db, desde, hasta)
+    except pedidos.PeriodoInvalido:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=PERIODO_INVALIDO)
+
+
+@router.get("/rendimiento")
+def rendimiento(
+    operario_id: OperarioActual, db: SesionDB, desde: date | None = None, hasta: date | None = None
+) -> list[RendimientoRepartidor]:
+    """HU-26: entregas y tiempo promedio de cada repartidor en el período (por defecto, el mes en curso)."""
+    try:
+        return reportes.rendimiento(db, desde, hasta)
+    except pedidos.PeriodoInvalido:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=PERIODO_INVALIDO)

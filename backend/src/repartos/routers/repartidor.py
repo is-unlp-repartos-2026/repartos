@@ -140,3 +140,16 @@ def confirmar_entrega(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"La foto tiene que ser una imagen JPG, PNG o WEBP de hasta {settings.tamano_max_foto_mb} MB",
         )
+
+
+@router.post("/pedidos/{pedido_id}/rechazar")
+def rechazar_pedido(pedido_id: int, repartidor_id: RepartidorActual, db: SesionDB) -> EstadoActualizado:
+    """HU-19: el repartidor rechaza un pedido asignado (antes de retirarlo); se le asigna a otro apto."""
+    try:
+        return entregas.rechazar_pedido(db, pedido_id, repartidor_id)
+    except entregas.PedidoNoEncontrado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
+    except entregas.EstadoNoPermitido:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Solo se puede rechazar un pedido asignado que no retiraste"
+        )

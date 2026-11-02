@@ -1,29 +1,37 @@
-// Panel del operario: login (HU-01) y las secciones Tablero, Registrar pedido y Repartidores.
-// La sección y el pedido abierto van en la URL (/operario?seccion=...&pedido=...):
-// así el botón "atrás" del navegador vuelve a la pantalla anterior.
+// Panel del operario: login (HU-01), cerrar sesión (HU-03) y las secciones Pedidos en curso, Registrar pedido,
+// Historial, Reportes y Repartidores. La sección, el pedido abierto y los filtros van en la URL
+// (/operario?seccion=...&pedido=...): así el botón "atrás" del navegador vuelve a la pantalla anterior.
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getSesionOperario, loginOperario, tokenOperario } from "@/lib/api";
+import { getSesionOperario, loginOperario, tokenOperario, type Estado, type FiltrosHistorial } from "@/lib/api";
 import { Marco, SinConexion, useSesion, type SesionActiva } from "../comun";
 import { Tablero } from "./Tablero";
 import { RegistrarPedido } from "./RegistrarPedido";
 import { DetallePedido } from "./DetallePedido";
 import { Repartidores } from "./Repartidores";
+import { Historial } from "./Historial";
+import { Reportes } from "./Reportes";
 
-export const SECCIONES_OPERARIO = ["tablero", "nuevo-pedido", "repartidores"] as const;
+export const SECCIONES_OPERARIO = ["tablero", "nuevo-pedido", "historial", "reportes", "repartidores"] as const;
 export type SeccionOperario = (typeof SECCIONES_OPERARIO)[number];
 
 const NOMBRE_SECCION: Record<SeccionOperario, string> = {
   tablero: "Pedidos en curso",
   "nuevo-pedido": "Registrar pedido",
+  historial: "Historial",
+  reportes: "Reportes",
   repartidores: "Repartidores",
 };
 
+// Lo que puede venir en la URL del panel (lo valida la ruta, en routes/operario.tsx).
+export type BusquedaOperario = { seccion?: SeccionOperario; pedido?: number; desde?: string; hasta?: string; estado?: Estado; repartidor?: number };
+
 export function OperarioPortal() {
   const sesion = useSesion(tokenOperario, getSesionOperario);
-  const { seccion = "tablero", pedido } = useSearch({ from: "/operario" });
+  const busqueda = useSearch({ from: "/operario" });
+  const { seccion = "tablero", pedido } = busqueda;
   const navigate = useNavigate();
 
   if (sesion.estado === "verificando") {
@@ -37,10 +45,27 @@ export function OperarioPortal() {
   }
 
   const activa: SesionActiva = { token: sesion.leerToken() ?? "", manejarError: sesion.manejarError };
-  const abrirPedido = (id: number) => navigate({ to: "/operario", search: { seccion, pedido: id } });
+  // Se conservan los filtros: al volver del detalle, el historial sigue con la misma búsqueda.
+  const abrirPedido = (id: number) => navigate({ to: "/operario", search: { ...busqueda, pedido: id } });
+  // Los filtros vacíos no van a la URL.
+  const filtrar = (f: { [K in "desde" | "hasta" | "estado" | "repartidor"]?: BusquedaOperario[K] | undefined }) =>
+    navigate({ to: "/operario", search: { seccion, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined)) } });
+
+  const filtrosHistorial: FiltrosHistorial = {};
+  if (busqueda.desde) filtrosHistorial.desde = busqueda.desde;
+  if (busqueda.hasta) filtrosHistorial.hasta = busqueda.hasta;
+  if (busqueda.estado) filtrosHistorial.estado = busqueda.estado;
+  if (busqueda.repartidor) filtrosHistorial.repartidor_id = busqueda.repartidor;
+
+  // HU-03: cierra la sesión y vuelve al ingreso. `replace` reemplaza la página actual en el historial del
+  // navegador; y aunque se vuelva atrás, sin token cualquier pantalla del panel muestra el ingreso.
+  function salir() {
+    sesion.cerrar();
+    navigate({ to: "/operario", search: {}, replace: true });
+  }
 
   return (
-    <Marco rol="Operario" titulo="Panel de gestión" onSalir={() => sesion.cerrar()}>
+    <Marco rol="Operario" titulo="Panel de gestión" onSalir={salir}>
       <nav className="staff-actions" style={{ margin: "24px 0" }} aria-label="Secciones del panel">
         {SECCIONES_OPERARIO.map((s) => (
           <Button key={s} type="button" className={s === seccion && pedido === undefined ? "btn btn-primary" : "staff-secondary"}
@@ -56,6 +81,12 @@ export function OperarioPortal() {
         <Tablero sesion={activa} onAbrir={abrirPedido} />
       ) : seccion === "nuevo-pedido" ? (
         <RegistrarPedido sesion={activa} onAbrir={abrirPedido} />
+      ) : seccion === "historial" ? (
+        <Historial sesion={activa} filtros={filtrosHistorial}
+          onFiltrar={(f) => filtrar({ desde: f.desde, hasta: f.hasta, estado: f.estado, repartidor: f.repartidor_id })} onAbrir={abrirPedido} />
+      ) : seccion === "reportes" ? (
+        <Reportes sesion={activa} periodo={{ ...(busqueda.desde ? { desde: busqueda.desde } : {}), ...(busqueda.hasta ? { hasta: busqueda.hasta } : {}) }}
+          onPeriodo={(p) => filtrar({ desde: p.desde, hasta: p.hasta })} />
       ) : (
         <Repartidores sesion={activa} />
       )}

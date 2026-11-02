@@ -1,5 +1,7 @@
 """Consultas SQL de la tabla pedidos."""
 
+from datetime import date
+
 from sqlalchemy import RowMapping, text
 from sqlalchemy.orm import Session
 
@@ -170,7 +172,7 @@ def listar_en_curso_de(db: Session, repartidor_id: int) -> list[RowMapping]:
             "SELECT p.id, p.origen, p.destino, p.estado, MAX(c.fecha_hora) AS asignado_el "
             "FROM pedidos p "
             "JOIN cambios_estado c ON c.pedido_id = p.id "
-            "  AND c.estado = :asignado AND c.repartidor_id = p.repartidor_id "
+            "  AND c.estado = :asignado AND c.repartidor_id = p.repartidor_id AND NOT c.modificacion "
             "WHERE p.repartidor_id = :repartidor_id AND p.estado IN (:asignado, :en_camino) "
             "GROUP BY p.id "
             "ORDER BY asignado_el, p.id"
@@ -218,6 +220,7 @@ def listar_en_curso(db: Session) -> list[RowMapping]:
     """Pedidos en curso para el tablero del operario (HU-22): registrados, asignados y en camino.
 
     "desde" es la fecha del último cambio de estado (cuánto hace que está así), sacada del historial.
+    Las correcciones de datos (HU-05) no cuentan: no cambian el estado.
     Los más viejos primero: son los que más atención necesitan.
     """
     resultado = db.execute(
@@ -226,7 +229,7 @@ def listar_en_curso(db: Session) -> list[RowMapping]:
             "p.repartidor_id, r.nombre AS repartidor_nombre, MAX(c.fecha_hora) AS desde "
             "FROM pedidos p "
             "LEFT JOIN repartidores r ON r.id = p.repartidor_id "
-            "JOIN cambios_estado c ON c.pedido_id = p.id "
+            "JOIN cambios_estado c ON c.pedido_id = p.id AND NOT c.modificacion "
             "WHERE p.estado IN (:registrado, :asignado, :en_camino) "
             "GROUP BY p.id, r.nombre "
             "ORDER BY desde, p.id"
@@ -254,3 +257,75 @@ def contar_en_curso_de(db: Session, repartidor_id: int) -> int:
         },
     )
     return resultado.scalar_one()
+
+
+def modificar_datos(
+    db: Session,
+    pedido_id: int,
+    origen: str,
+    destino: str,
+    receptor_nombre: str,
+    receptor_dni: str,
+    peso_kg: float,
+    alto_cm: float,
+    ancho_cm: float,
+    largo_cm: float,
+) -> None:
+    """Corrige los datos del pedido (HU-05). El estado y el repartidor no se tocan acá."""
+    db.execute(
+        text(
+            "UPDATE pedidos SET origen = :origen, destino = :destino, receptor_nombre = :receptor_nombre, "
+            "receptor_dni = :receptor_dni, peso_kg = :peso_kg, alto_cm = :alto_cm, ancho_cm = :ancho_cm, "
+            "largo_cm = :largo_cm WHERE id = :id"
+        ),
+        {
+            "origen": origen,
+            "destino": destino,
+            "receptor_nombre": receptor_nombre,
+            "receptor_dni": receptor_dni,
+            "peso_kg": peso_kg,
+            "alto_cm": alto_cm,
+            "ancho_cm": ancho_cm,
+            "largo_cm": largo_cm,
+            "id": pedido_id,
+        },
+    )
+
+
+# Fecha y hora en que se registró cada pedido: el primer cambio de su historial (la tabla pedidos no la
+# guarda). La usan el historial (HU-24) y los reportes (HU-25, HU-26) para saber si un pedido es "del período".
+SQL_REGISTRADO_EL = "SELECT pedido_id, MIN(fecha_hora) AS registrado_el FROM cambios_estado GROUP BY pedido_id"
+
+
+def listar_historial(
+    db: Session,
+    desde: date,
+    hasta: date,
+    zona_horaria: str,
+    estado: EstadoPedido | None = None,
+    repartidor_id: int | None = None,
+) -> list[RowMapping]:
+    """Pedidos registrados entre `desde` y `hasta` (ambos días incluidos), del más nuevo al más viejo (HU-24).
+
+    - Las fechas se guardan en UTC: AT TIME ZONE las pasa a la hora de Argentina antes de quedarse con el
+      día (::date). Si no, un pedido de las 22 h caería en el día siguiente.
+    - Filtros opcionales sin armar texto, igual que en repartidores.listar: si el parámetro es NULL, la
+      primera parte del OR es verdadera y ese filtro no se aplica. Así el SQL es siempre el mismo y los
+      valores viajan siempre como parámetros (nunca pegados al texto: sin riesgo de inyección SQL).
+    - El filtro por repartidor usa el repartidor actual del pedido (quien lo entregó, si ya terminó).
+    """
+    resultado = db.execute(
+        text(
+            "SELECT p.id, p.codigo_seguimiento, p.origen, p.destino, p.estado, "
+            "p.repartidor_id, r.nombre AS repartidor_nombre, reg.registrado_el "
+            "FROM pedidos p "
+            f"JOIN ({SQL_REGISTRADO_EL}) reg ON reg.pedido_id = p.id "  # texto fijo del código
+            "LEFT JOIN repartidores r ON r.id = p.repartidor_id "
+            "WHERE (reg.registrado_el AT TIME ZONE :zona)::date BETWEEN :desde AND :hasta "
+            "AND (CAST(:estado AS TEXT) IS NULL OR p.estado = CAST(:estado AS estadopedido)) "
+            "AND (CAST(:repartidor_id AS INTEGER) IS NULL OR p.repartidor_id = :repartidor_id) "
+            "ORDER BY reg.registrado_el DESC, p.id DESC"
+        ),
+        {"zona": zona_horaria, "desde": desde, "hasta": hasta, "estado": estado, "repartidor_id": repartidor_id},
+    )
+    return list(resultado.mappings())

@@ -115,6 +115,7 @@ class CambioDeEstadoOperario(BaseModel):
     fecha_hora: datetime
     repartidor: RepartidorDelPedido | None
     detalle: str | None
+    modificacion: bool  # True: corrección de datos (HU-05), no un cambio de estado
 
 
 class DetallePedidoOperario(BaseModel):
@@ -176,3 +177,25 @@ class ResultadoReasignacion(BaseModel):
     estado: EstadoPedido
     repartidor: RepartidorDelPedido | None
     aviso: str | None = None
+
+
+class ResultadoModificacion(BaseModel):
+    """Cómo quedó el pedido después de modificarlo (HU-05). Si cambiaron el peso o las medidas y el repartidor
+    ya no puede llevarlo, se reasigna; si no hay otro apto, vuelve a "registrado" con un aviso."""
+
+    id: int
+    estado: EstadoPedido
+    repartidor: RepartidorDelPedido | None
+    aviso: str | None = None
+
+
+class PedidoEnHistorial(BaseModel):
+    """Un pedido en el historial del operario (HU-24)."""
+
+    id: int
+    codigo_seguimiento: str
+    origen: str
+    destino: str
+    estado: EstadoPedido
+    repartidor: RepartidorDelPedido | None
+    registrado_el: datetime

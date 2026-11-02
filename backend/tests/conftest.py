@@ -17,6 +17,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
+from repartos.core import correo
 from repartos.core.config import settings
 from repartos.db.session import get_db
 from repartos.main import app
@@ -82,3 +83,17 @@ def cliente(db: Session) -> Generator[TestClient]:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def correos_enviados(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Ningún test manda correos de verdad (aunque el .env tenga el SMTP configurado): el envío se
+    reemplaza por una lista donde quedan anotados. autouse=True: se aplica a todos los tests solo."""
+    enviados: list[dict] = []
+
+    def enviar_de_mentira(destinatario: str, asunto: str, cuerpo: str) -> bool:
+        enviados.append({"destinatario": destinatario, "asunto": asunto, "cuerpo": cuerpo})
+        return True
+
+    monkeypatch.setattr(correo, "enviar", enviar_de_mentira)
+    return enviados

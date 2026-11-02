@@ -52,6 +52,8 @@ class RepartidorRegistrado(Repartidor):
     """
 
     codigo_acceso: str
+    # HU-15: si se le pudo mandar el código por correo. Si es False, el operario se lo pasa en mano.
+    correo_enviado: bool
 
 
 class RepartidorDeshabilitado(BaseModel):

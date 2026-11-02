@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from repartos.db.base import Base
@@ -62,3 +62,6 @@ class CambioEstado(Base):
     fecha_hora: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Motivo o aclaración: cancelación, reasignación, rechazo, entrega fallida, etc.
     detalle: Mapped[str | None] = mapped_column(String(200))
+    # True: no es un cambio de estado sino una corrección de datos del pedido (HU-05). Queda en el historial
+    # del operario, pero no cuenta para "desde cuándo está en este estado" ni la ve el cliente final.
+    modificacion: Mapped[bool] = mapped_column(server_default=false())

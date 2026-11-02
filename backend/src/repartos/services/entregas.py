@@ -1,5 +1,5 @@
 """Reglas de las acciones del repartidor sobre sus pedidos (HU-18 Retirar pedido, HU-07 Entrega fallida,
-HU-20 Confirmar entrega, HU-16 y HU-17 Consultar pedidos asignados y su detalle)."""
+HU-20 Confirmar entrega, HU-16 y HU-17 Consultar pedidos asignados y su detalle, HU-19 Rechazar pedido)."""
 
 from sqlalchemy import RowMapping
 from sqlalchemy.orm import Session
@@ -7,13 +7,14 @@ from sqlalchemy.orm import Session
 from repartos.core import fotos
 from repartos.core.config import settings
 from repartos.models import EstadoPedido
-from repartos.repositories import cambios_estado, pedidos
+from repartos.repositories import cambios_estado, pedidos, repartidores
 from repartos.schemas.pedidos import (
     DatosEntregaFallida,
     DetallePedidoAsignado,
     EstadoActualizado,
     PedidoAsignado,
 )
+from repartos.services import asignacion
 from repartos.services.pedidos import EstadoNoPermitido, PedidoNoEncontrado
 
 
@@ -111,3 +112,20 @@ def detalle_pedido_asignado(db: Session, pedido_id: int, repartidor_id: int) -> 
     ):
         raise PedidoNoEncontrado
     return DetallePedidoAsignado(**pedido)
+
+
+def rechazar_pedido(db: Session, pedido_id: int, repartidor_id: int) -> EstadoActualizado:
+    """HU-19: solo en "repartidor asignado" (antes de retirarlo). Se asigna a otro apto, excluyendo a quien
+    rechazó; si no hay, vuelve a "registrado" y el operario lo ve en el tablero. El rechazo queda en el historial.
+    """
+    pedido = _pedido_del_repartidor(db, pedido_id, repartidor_id)
+    if pedido["estado"] != EstadoPedido.REPARTIDOR_ASIGNADO:
+        raise EstadoNoPermitido
+
+    nombre = repartidores.buscar_por_id(db, repartidor_id)["nombre"]
+    nuevo = asignacion.reasignar(db, pedido, repartidor_id, motivo=f"{nombre} rechazó el pedido")
+    db.commit()
+    # Al repartidor no se le dice a quién pasó: solo que ya no es suyo.
+    return EstadoActualizado(
+        id=pedido_id, estado=EstadoPedido.REPARTIDOR_ASIGNADO if nuevo else EstadoPedido.REGISTRADO
+    )

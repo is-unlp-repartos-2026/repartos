@@ -1,4 +1,5 @@
-// App del repartidor: login con código (HU-02), jornada laboral (HU-13 y HU-14) y sus pedidos (HU-16).
+// App del repartidor: login con código (HU-02), cerrar sesión (HU-03), jornada laboral (HU-13 y HU-14)
+// y sus pedidos (HU-16).
 // El pedido abierto va en la URL (/repartidor?pedido=...): el "atrás" del celular vuelve a la lista.
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -33,7 +34,8 @@ export function RepartidorPortal() {
   const repartidor = sesion.usuario;
 
   return (
-    <Marco rol="Repartidor" titulo={`Hola, ${repartidor.nombre}`} onSalir={() => sesion.cerrar()}>
+    // HU-03: igual que en el panel del operario (replace: la pantalla anterior sale del historial).
+    <Marco rol="Repartidor" titulo={`Hola, ${repartidor.nombre}`} onSalir={() => { sesion.cerrar(); setAviso(""); navigate({ to: "/repartidor", search: {}, replace: true }); }}>
       {pedido !== undefined ? (
         <DetallePedidoAsignado key={pedido} id={pedido} sesion={activa}
           onTerminado={(texto) => { setAviso(texto); navigate({ to: "/repartidor", search: {} }); }} />
