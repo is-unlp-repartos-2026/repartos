@@ -1,5 +1,6 @@
 // Sección de repartidores del operario:
 //   HU-09 alta (el botón queda deshabilitado hasta que el formulario sea válido)
+//   HU-15 el código de acceso también se le manda por correo
 //   HU-10 listado con filtro por habilitación
 //   HU-11 modificar la carga habilitada
 //   HU-12 habilitar / deshabilitar (cada botón aparece solo cuando corresponde)
@@ -130,7 +131,7 @@ function AltaRepartidor({ sesion, onAlta }: { sesion: SesionActiva; onAlta: () =
   const [borrador, setBorrador] = useState<Borrador>(VACIO);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
-  const [generado, setGenerado] = useState<{ nombre: string; codigo: string } | null>(null);
+  const [generado, setGenerado] = useState<{ nombre: string; codigo: string; correo: string; enviado: boolean } | null>(null);
   const falta = queFalta(borrador);
 
   const campo = (nombre: keyof Borrador, limpiar: (v: string) => string = (v) => v) =>
@@ -146,7 +147,7 @@ function AltaRepartidor({ sesion, onAlta }: { sesion: SesionActiva; onAlta: () =
       const nuevo = await registrarRepartidor(sesion.token, {
         nombre: borrador.nombre.trim(), dni: borrador.dni, correo: borrador.correo.trim(), ...cargaANumeros(borrador),
       });
-      setGenerado({ nombre: nuevo.nombre, codigo: nuevo.codigo_acceso });
+      setGenerado({ nombre: nuevo.nombre, codigo: nuevo.codigo_acceso, correo: nuevo.correo, enviado: nuevo.correo_enviado });
       setBorrador(VACIO);
       onAlta();
     } catch (err) {
@@ -175,7 +176,10 @@ function AltaRepartidor({ sesion, onAlta }: { sesion: SesionActiva; onAlta: () =
       {generado && (
         <div className="demo-notice" role="status" style={{ marginTop: 24, borderLeftColor: "var(--m-red)", backgroundColor: "#fef2f2" }}>
           <strong>¡Alta exitosa!</strong> Entregale este código de acceso a {generado.nombre}: <strong style={{ fontSize: 20, letterSpacing: "0.15em", marginLeft: 8 }}>{generado.codigo}</strong>
-          <br /><small>Anotalo ahora: por seguridad no se vuelve a mostrar.</small>
+          <br />
+          {generado.enviado
+            ? <small>También se lo enviamos por correo a <strong>{generado.correo}</strong>. Por seguridad, no se vuelve a mostrar.</small>
+            : <small>No se pudo enviar por correo: anotalo ahora y entregáselo en mano. Por seguridad, no se vuelve a mostrar.</small>}
         </div>
       )}
     </div>

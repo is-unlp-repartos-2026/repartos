@@ -1,16 +1,16 @@
 // HU-17: el detalle de un pedido del repartidor (nunca el contenido del paquete).
 // Las acciones aparecen SOLO en el estado en que se permiten:
-//   "Repartidor asignado" → HU-18 Retirar pedido
+//   "Repartidor asignado" → HU-18 Retirar pedido y HU-19 Rechazar pedido
 //   "En camino"           → HU-20 Confirmar entrega (foto + DNI) y HU-07 Registrar entrega fallida (motivo)
 import { useEffect, useState } from "react";
-import { Camera, PackageCheck, PackageX } from "lucide-react";
+import { Camera, PackageCheck, PackageX, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  MOTIVOS_FALLO, confirmarEntrega, getPedidoAsignado, registrarEntregaFallida, retirarPedido,
+  MOTIVOS_FALLO, confirmarEntrega, getPedidoAsignado, rechazarPedido, registrarEntregaFallida, retirarPedido,
   type DetallePedidoAsignado as Detalle, type MotivoFallo,
 } from "@/lib/api";
 import { NOMBRE_ESTADO, dniValido, formatearMedidas, soloDigitos } from "@/lib/formato";
-import { Aviso, type SesionActiva } from "../comun";
+import { Aviso, Ventana, type SesionActiva } from "../comun";
 
 type Props = { id: number; sesion: SesionActiva; onTerminado: (aviso: string) => void };
 
@@ -19,6 +19,7 @@ export function DetallePedidoAsignado({ id, sesion, onTerminado }: Props) {
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [accion, setAccion] = useState<"entregar" | "fallida" | null>(null);
+  const [confirmarRechazo, setConfirmarRechazo] = useState(false);
 
   function cargar() {
     getPedidoAsignado(sesion.token, id)
@@ -35,6 +36,19 @@ export function DetallePedidoAsignado({ id, sesion, onTerminado }: Props) {
     } catch (err) {
       setError(sesion.manejarError(err));
     } finally {
+      setEnviando(false);
+    }
+  }
+
+  // HU-19: se asigna a otro repartidor apto (o vuelve a "Registrado") y desaparece de su lista.
+  async function rechazar() {
+    setEnviando(true);
+    try {
+      await rechazarPedido(sesion.token, id);
+      onTerminado("Rechazaste el pedido: ya no está en tu lista.");
+    } catch (err) {
+      setError(sesion.manejarError(err));
+      setConfirmarRechazo(false);
       setEnviando(false);
     }
   }
@@ -58,8 +72,17 @@ export function DetallePedidoAsignado({ id, sesion, onTerminado }: Props) {
       <Aviso texto={error} error />
 
       {pedido.estado === "repartidor_asignado" && (
-        <Button className="btn btn-primary staff-submit" disabled={enviando} onClick={retirar}>{enviando ? "Un momento…" : "Retirar pedido"}</Button>
+        <div className="staff-actions" style={{ alignItems: "flex-end" }}>
+          <Button className="btn btn-primary staff-submit" disabled={enviando} onClick={retirar}>{enviando ? "Un momento…" : "Retirar pedido"}</Button>
+          <Button variant="outline" className="staff-secondary" disabled={enviando} onClick={() => setConfirmarRechazo(true)}><Undo2 />Rechazar pedido</Button>
+        </div>
       )}
+      <Ventana abierta={confirmarRechazo} titulo="¿Rechazar este pedido?" descripcion="Se le va a asignar a otro repartidor y deja de estar en tu lista." onCerrar={() => setConfirmarRechazo(false)}>
+        <div className="staff-actions">
+          <Button className="btn btn-primary" disabled={enviando} onClick={rechazar}>{enviando ? "Rechazando…" : "Sí, rechazar"}</Button>
+          <Button variant="outline" className="staff-secondary" onClick={() => setConfirmarRechazo(false)}>No, volver</Button>
+        </div>
+      </Ventana>
 
       {pedido.estado === "en_camino" && (
         <>

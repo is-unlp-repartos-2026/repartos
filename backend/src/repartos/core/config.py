@@ -35,5 +35,18 @@ class Settings(BaseSettings):
     carpeta_fotos: Path = RAIZ_BACKEND / "uploads" / "fotos"
     tamano_max_foto_mb: int = 5
 
+    # Zona horaria del negocio: "los pedidos del día" (HU-24) y los períodos de los reportes (HU-25, HU-26)
+    # son días de Argentina, aunque la base guarde las fechas en UTC.
+    zona_horaria: str = "America/Argentina/Buenos_Aires"
+
+    # Correo para enviarle el código de acceso al repartidor (HU-15). Si smtp_host está vacío, no se envía
+    # nada (el operario igual ve el código en pantalla). Con Gmail: smtp.gmail.com, puerto 587, y como
+    # contraseña una "contraseña de aplicación" (no la de la cuenta).
+    smtp_host: str = ""
+    smtp_puerto: int = 587
+    smtp_usuario: str = ""
+    smtp_contrasena: str = ""
+    smtp_remitente: str = ""  # si queda vacío, se usa smtp_usuario
+
 
 settings = Settings()

@@ -1,16 +1,18 @@
 // HU-23: el detalle de un pedido (se abre desde el tablero). Entregado → además foto y DNI;
 // entrega fallida → además el motivo. Se actualiza solo, como el tablero.
 // Acá están también las acciones, y cada botón aparece SOLO en los estados en que se permite:
+//   HU-05 Modificar → "Registrado" o "Repartidor asignado"
 //   HU-06 Cancelar  → "Registrado" o "Repartidor asignado"
 //   HU-08 Reasignar → "Repartidor asignado" (el motivo es obligatorio)
 import { useEffect, useState } from "react";
-import { Ban, Shuffle } from "lucide-react";
+import { Ban, Pencil, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  cancelarPedido, getDetallePedido, getFotoPedido, reasignarPedido, type DetallePedidoOperario,
+  cancelarPedido, getDetallePedido, getFotoPedido, modificarPedido, reasignarPedido, type DetallePedidoOperario,
 } from "@/lib/api";
 import { NOMBRE_ESTADO, formatearFecha, formatearMedidas } from "@/lib/formato";
 import { Aviso, Ventana, useCadaTanto, type SesionActiva } from "../comun";
+import { CamposPedido, borradorDe, datosDe, queFaltaPedido } from "./CamposPedido";
 
 const LARGO_MAX_MOTIVO = 150;
 
@@ -18,7 +20,7 @@ export function DetallePedido({ id, sesion }: { id: number; sesion: SesionActiva
   const [pedido, setPedido] = useState<DetallePedidoOperario | null>(null);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
-  const [ventana, setVentana] = useState<"cancelar" | "reasignar" | null>(null);
+  const [ventana, setVentana] = useState<"modificar" | "cancelar" | "reasignar" | null>(null);
 
   function cargar() {
     getDetallePedido(sesion.token, id)
@@ -29,7 +31,9 @@ export function DetallePedido({ id, sesion }: { id: number; sesion: SesionActiva
 
   if (!pedido) return error ? <Aviso texto={error} error /> : <p className="fsub">Cargando pedido…</p>;
 
+  // Modificar y cancelar: solo mientras el pedido no fue retirado.
   const puedeCancelar = pedido.estado === "registrado" || pedido.estado === "repartidor_asignado";
+  const puedeModificar = puedeCancelar;
   const puedeReasignar = pedido.estado === "repartidor_asignado";
 
   return (
@@ -54,8 +58,9 @@ export function DetallePedido({ id, sesion }: { id: number; sesion: SesionActiva
 
       {pedido.estado === "entregado" && <FotoEntrega id={pedido.id} sesion={sesion} />}
 
-      {(puedeCancelar || puedeReasignar) && (
+      {(puedeModificar || puedeCancelar || puedeReasignar) && (
         <div className="staff-actions" style={{ marginBottom: 30 }}>
+          {puedeModificar && <Button variant="outline" className="staff-secondary" onClick={() => setVentana("modificar")}><Pencil />Modificar</Button>}
           {puedeReasignar && <Button variant="outline" className="staff-secondary" onClick={() => setVentana("reasignar")}><Shuffle />Reasignar</Button>}
           {puedeCancelar && <Button variant="outline" className="staff-secondary" onClick={() => setVentana("cancelar")}><Ban />Cancelar pedido</Button>}
         </div>
@@ -65,13 +70,16 @@ export function DetallePedido({ id, sesion }: { id: number; sesion: SesionActiva
       <ol style={{ paddingLeft: 18, marginTop: 12, lineHeight: 1.8 }}>
         {pedido.historial.map((h, i) => (
           <li key={i}>
-            <strong>{NOMBRE_ESTADO[h.estado]}</strong> — {formatearFecha(h.fecha_hora)}
+            {/* Una corrección de datos (HU-05) no es un cambio de estado */}
+            <strong>{h.modificacion ? "Modificación" : NOMBRE_ESTADO[h.estado]}</strong> — {formatearFecha(h.fecha_hora)}
             {h.repartidor && <> · {h.repartidor.nombre}</>}
             {h.detalle && <> · <em>{h.detalle}</em></>}
           </li>
         ))}
       </ol>
 
+      {ventana === "modificar" && <ModificarPedido pedido={pedido} sesion={sesion}
+        onCerrar={() => setVentana(null)} onListo={(texto) => { setVentana(null); setAviso(texto); cargar(); }} />}
       <ConfirmarCancelacion abierta={ventana === "cancelar"} pedido={pedido} sesion={sesion}
         onCerrar={() => setVentana(null)} onListo={(texto) => { setVentana(null); setAviso(texto); cargar(); }} />
       <PedirReasignacion abierta={ventana === "reasignar"} pedido={pedido} sesion={sesion}
@@ -167,5 +175,47 @@ function FotoEntrega({ id, sesion }: { id: number; sesion: SesionActiva }) {
       {url ? <img src={url} alt="Foto de la entrega" style={{ maxWidth: "100%", maxHeight: 420, borderRadius: 8, border: "1px solid var(--border)" }} />
         : !error && <p className="fsub">Cargando foto…</p>}
     </div>
+  );
+}
+
+// HU-05: se abre con los datos actuales. El botón se habilita solo si todo es válido y algo cambió.
+// Si cambia el peso o las medidas y el repartidor ya no puede llevarlo, el backend lo reasigna.
+function ModificarPedido({ pedido, sesion, onCerrar, onListo }: Omit<PropsVentana, "abierta">) {
+  const [borrador, setBorrador] = useState(() => borradorDe(pedido));
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+  const sinCambios = JSON.stringify(datosDe(borrador)) === JSON.stringify(datosDe(borradorDe(pedido)));
+  const falta = queFaltaPedido(borrador) ?? (sinCambios ? "Cambiá algún dato para poder guardar." : null);
+
+  async function guardar() {
+    setEnviando(true);
+    try {
+      const r = await modificarPedido(sesion.token, pedido.id, datosDe(borrador));
+      const antes = pedido.repartidor?.id ?? null;
+      const ahora = r.repartidor?.id ?? null;
+      onListo(
+        r.aviso ? `Se guardaron los cambios. ${r.aviso}`
+          : ahora !== antes && r.repartidor ? `Se guardaron los cambios y el pedido se asignó a ${r.repartidor.nombre}.`
+          : "Se guardaron los cambios.",
+      );
+    } catch (err) {
+      setError(sesion.manejarError(err));
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <Ventana abierta titulo={`Modificar el pedido ${pedido.codigo_seguimiento}`}
+      descripcion="Si cambiás el peso o las medidas y el repartidor ya no puede llevarlo, se asigna a otro." onCerrar={onCerrar}>
+      <div className="fgrid" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+        <CamposPedido borrador={borrador} onCambio={setBorrador} />
+      </div>
+      {falta && <p className="hint" style={{ margin: 0 }}>{falta}</p>}
+      <Aviso texto={error} error />
+      <div className="staff-actions">
+        <Button className="btn btn-primary" disabled={!!falta || enviando} onClick={guardar}>{enviando ? "Guardando…" : "Guardar cambios"}</Button>
+        <Button variant="outline" className="staff-secondary" onClick={onCerrar}>Cancelar</Button>
+      </div>
+    </Ventana>
   );
 }

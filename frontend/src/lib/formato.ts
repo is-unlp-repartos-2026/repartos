@@ -13,6 +13,22 @@ export const NOMBRE_ESTADO: Record<Estado, string> = {
 export const formatearFecha = (iso: string) =>
   new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 
+// Hoy en formato AAAA-MM-DD (el de los <input type="date">), según el reloj del dispositivo.
+export const hoyISO = () => new Date().toLocaleDateString("en-CA");
+
+// "2026-03-10" → "10/03/2026"
+export const formatearDia = (iso: string) => iso.split("-").reverse().join("/");
+
+// 37.5 → "38 min" · 95 → "1 h 35 min" · 3000 → "2 d 2 h"
+export function formatearMinutos(minutos: number | null): string {
+  if (minutos === null) return "Sin datos";
+  const total = Math.round(minutos);
+  if (total < 60) return `${total} min`;
+  const horas = Math.floor(total / 60);
+  if (horas < 24) return `${horas} h ${String(total % 60).padStart(2, "0")} min`;
+  return `${Math.floor(horas / 24)} d ${horas % 24} h`;
+}
+
 export const formatearMedidas = (alto: number, ancho: number, largo: number) => `${alto} × ${ancho} × ${largo} cm`;
 
 // --- Limpieza mientras se escribe: lo inválido directamente no entra en el campo ---

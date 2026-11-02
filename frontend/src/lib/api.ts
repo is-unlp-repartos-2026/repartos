@@ -50,6 +50,16 @@ async function pedir<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
   return (await res.json().catch(() => null)) as T;
 }
 
+// Arma "?desde=...&estado=..." con los filtros que tienen valor (los vacíos no se mandan).
+function consulta(filtros: Record<string, string | number | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor !== undefined && valor !== "") params.set(clave, String(valor));
+  }
+  const texto = params.toString();
+  return texto ? `?${texto}` : "";
+}
+
 // --- Tokens guardados en el navegador (la sesión sobrevive a recargar la página) ---
 
 const CLAVE_TOKEN_OPERARIO = "operarioToken";
@@ -88,7 +98,8 @@ export type Repartidor = {
   habilitado: boolean;
   activo: boolean;
 };
-export type RepartidorRegistrado = Repartidor & { codigo_acceso: string };
+// correo_enviado (HU-15): si el código le llegó por correo; si no, el operario se lo pasa en mano.
+export type RepartidorRegistrado = Repartidor & { codigo_acceso: string; correo_enviado: boolean };
 export type DatosNuevoRepartidor = Omit<Repartidor, "id" | "habilitado" | "activo">;
 export type Habilitacion = Pick<Repartidor, "peso_max_kg" | "alto_max_cm" | "ancho_max_cm" | "largo_max_cm">;
 export type RepartidorDeshabilitado = { repartidor: Repartidor; pedidos_reasignados: number; pedidos_sin_repartidor: number };
@@ -128,13 +139,48 @@ export type DetallePedidoOperario = DatosNuevoPedido & {
   codigo_seguimiento: string;
   estado: Estado;
   repartidor: RepartidorDelPedido | null;
-  historial: { estado: Estado; fecha_hora: string; repartidor: RepartidorDelPedido | null; detalle: string | null }[];
+  // modificacion: true si no es un cambio de estado sino una corrección de datos (HU-05)
+  historial: { estado: Estado; fecha_hora: string; repartidor: RepartidorDelPedido | null; detalle: string | null; modificacion: boolean }[];
   foto_url: string | null; // solo si está entregado
   motivo_fallo: string | null; // solo si la entrega falló
 };
 
 export type EstadoActualizado = { id: number; estado: Estado };
+// Cómo quedó un pedido después de reasignarlo (HU-08) o modificarlo (HU-05).
 export type ResultadoReasignacion = { id: number; estado: Estado; repartidor: RepartidorDelPedido | null; aviso: string | null };
+
+export type PedidoEnHistorial = {
+  id: number;
+  codigo_seguimiento: string;
+  origen: string;
+  destino: string;
+  estado: Estado;
+  repartidor: RepartidorDelPedido | null;
+  registrado_el: string;
+};
+// Filtros del historial (HU-24): fechas en formato AAAA-MM-DD. Sin fechas, el backend usa el día de hoy.
+export type FiltrosHistorial = { desde?: string; hasta?: string; estado?: Estado; repartidor_id?: number };
+
+// Período de los reportes (HU-25, HU-26). Sin fechas, el backend usa el mes en curso.
+export type Periodo = { desde?: string; hasta?: string };
+// Los tiempos vienen en minutos; null cuando no hay datos para calcularlos.
+export type Metricas = {
+  desde: string;
+  hasta: string;
+  total_pedidos: number;
+  pedidos_por_estado: Record<Estado, number>;
+  minutos_entre_pedidos: number | null;
+  minutos_entre_entregas: number | null;
+  minutos_promedio_entrega: number | null;
+  porcentaje_entregas_fallidas: number | null;
+};
+export type RendimientoRepartidor = {
+  id: number;
+  nombre: string;
+  entregas_realizadas: number;
+  entregas_fallidas: number;
+  minutos_promedio_entrega: number | null;
+};
 
 export type JornadaComenzada = { activo: boolean; pedidos_asignados: number };
 export type JornadaTerminada = { activo: boolean; pedidos_reasignados: number; pedidos_sin_repartidor: number };
@@ -209,8 +255,26 @@ export function cancelarPedido(token: string, id: number) {
   return pedir<EstadoActualizado>(`/operario/pedidos/${id}/cancelar`, { method: "POST", token });
 }
 
+export function modificarPedido(token: string, id: number, datos: DatosNuevoPedido) {
+  return pedir<ResultadoReasignacion>(`/operario/pedidos/${id}`, { method: "PUT", body: datos, token });
+}
+
+export function historialPedidos(token: string, filtros: FiltrosHistorial) {
+  return pedir<PedidoEnHistorial[]>(`/operario/pedidos${consulta(filtros)}`, { token });
+}
+
 export function reasignarPedido(token: string, id: number, motivo: string) {
   return pedir<ResultadoReasignacion>(`/operario/pedidos/${id}/reasignar`, { method: "POST", body: { motivo }, token });
+}
+
+// --- Operario: reportes ---
+
+export function getMetricas(token: string, periodo: Periodo) {
+  return pedir<Metricas>(`/operario/metricas${consulta(periodo)}`, { token });
+}
+
+export function getRendimiento(token: string, periodo: Periodo) {
+  return pedir<RendimientoRepartidor[]>(`/operario/rendimiento${consulta(periodo)}`, { token });
 }
 
 // --- Repartidor ---
@@ -241,6 +305,10 @@ export function getPedidoAsignado(token: string, id: number) {
 
 export function retirarPedido(token: string, id: number) {
   return pedir<EstadoActualizado>(`/repartidor/pedidos/${id}/retirar`, { method: "POST", token });
+}
+
+export function rechazarPedido(token: string, id: number) {
+  return pedir<EstadoActualizado>(`/repartidor/pedidos/${id}/rechazar`, { method: "POST", token });
 }
 
 export function registrarEntregaFallida(token: string, id: number, motivo: MotivoFallo, aclaracion: string) {

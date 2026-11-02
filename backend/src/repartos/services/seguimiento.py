@@ -18,5 +18,8 @@ def consultar_estado(db: Session, codigo: str) -> EstadoDelPedido:
     return EstadoDelPedido(
         codigo_seguimiento=pedido["codigo_seguimiento"],
         estado=pedido["estado"],
-        historial=[CambioDeEstado(estado=c["estado"], fecha_hora=c["fecha_hora"]) for c in historial],
+        # Las correcciones de datos (HU-05) no son cambios de estado: el cliente final no las ve.
+        historial=[
+            CambioDeEstado(estado=c["estado"], fecha_hora=c["fecha_hora"]) for c in historial if not c["modificacion"]
+        ],
     )

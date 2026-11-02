@@ -1,8 +1,9 @@
 """Reglas de los repartidores (HU-09 Registrar, HU-10 Listar, HU-11 Modificar habilitación,
-HU-12 Habilitar o deshabilitar)."""
+HU-12 Habilitar o deshabilitar, HU-15 Enviar código de acceso por correo)."""
 
 from sqlalchemy.orm import Session
 
+from repartos.core import correo
 from repartos.core.security import generar_codigo_acceso, hashear_codigo_acceso
 from repartos.repositories import pedidos, repartidores
 from repartos.schemas.repartidores import (
@@ -61,7 +62,18 @@ def registrar_repartidor(db: Session, datos: DatosNuevoRepartidor) -> Repartidor
     )
     db.commit()
 
-    return RepartidorRegistrado(**fila, codigo_acceso=codigo)
+    # HU-15: se manda DESPUÉS del commit: si el alta fallara, no tiene que llegar un código que no sirve.
+    # Si el correo falla, el alta igual queda hecha y el operario ve el código en pantalla.
+    enviado = correo.enviar(
+        fila["correo"],
+        asunto="Tu código de acceso a SIGER",
+        cuerpo=(
+            f"Hola, {fila['nombre']}.\n\n"
+            f"Ya estás registrado como repartidor de SIGER. Tu código de acceso a la app es: {codigo}\n\n"
+            "Guardalo: lo vas a necesitar para ingresar. No lo compartas con nadie."
+        ),
+    )
+    return RepartidorRegistrado(**fila, codigo_acceso=codigo, correo_enviado=enviado)
 
 
 def listar_repartidores(db: Session, habilitado: bool | None = None) -> list[Repartidor]:

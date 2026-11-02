@@ -12,14 +12,25 @@ def insertar(
     estado: EstadoPedido,
     repartidor_id: int | None = None,
     detalle: str | None = None,
+    modificacion: bool = False,
 ) -> None:
-    """Registra que el pedido pasó a `estado`. La fecha y hora la pone la base (now())."""
+    """Registra que el pedido pasó a `estado`. La fecha y hora la pone la base (now()).
+
+    Con modificacion=True no es un cambio de estado sino una corrección de datos (HU-05): `estado` es el
+    que tenía el pedido en ese momento.
+    """
     db.execute(
         text(
-            "INSERT INTO cambios_estado (pedido_id, estado, repartidor_id, detalle) "
-            "VALUES (:pedido_id, :estado, :repartidor_id, :detalle)"
+            "INSERT INTO cambios_estado (pedido_id, estado, repartidor_id, detalle, modificacion) "
+            "VALUES (:pedido_id, :estado, :repartidor_id, :detalle, :modificacion)"
         ),
-        {"pedido_id": pedido_id, "estado": estado, "repartidor_id": repartidor_id, "detalle": detalle},
+        {
+            "pedido_id": pedido_id,
+            "estado": estado,
+            "repartidor_id": repartidor_id,
+            "detalle": detalle,
+            "modificacion": modificacion,
+        },
     )
 
 
@@ -31,7 +42,7 @@ def listar_de_pedido(db: Session, pedido_id: int) -> list[RowMapping]:
     """
     resultado = db.execute(
         text(
-            "SELECT c.estado, c.fecha_hora, c.repartidor_id, r.nombre AS repartidor_nombre, c.detalle "
+            "SELECT c.estado, c.fecha_hora, c.repartidor_id, r.nombre AS repartidor_nombre, c.detalle, c.modificacion "
             "FROM cambios_estado c "
             "LEFT JOIN repartidores r ON r.id = c.repartidor_id "
             "WHERE c.pedido_id = :pedido_id ORDER BY c.fecha_hora, c.id"
