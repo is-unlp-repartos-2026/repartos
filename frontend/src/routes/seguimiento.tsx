@@ -5,6 +5,7 @@ import { Footer } from "@/components/site/Inferior";
 import { Eyebrow } from "@/components/site/Icon";
 import { BuscadorGuia } from "@/components/site/BuscadorGuia";
 import { ApiError, consultarSeguimiento, type Seguimiento } from "@/lib/api";
+import { NOMBRE_ESTADO, formatearFecha } from "@/lib/formato";
 
 export const Route = createFileRoute("/seguimiento")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -22,14 +23,6 @@ export const Route = createFileRoute("/seguimiento")({
   }),
   component: SeguimientoPage,
 });
-
-const formatearEstado = (estado: string) => {
-  const texto = estado.replace(/_/g, " ");
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-};
-
-const formatearFecha = (iso: string) =>
-  new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 
 function SeguimientoPage() {
   const { guia } = Route.useSearch();
@@ -82,11 +75,11 @@ function SeguimientoPage() {
               {error && <p className="fsub">{error}</p>}
               {datos && (
                 <>
-                  <h3>Estado actual: {formatearEstado(datos.estado)}</h3>
+                  <h3>Estado actual: {NOMBRE_ESTADO[datos.estado]}</h3>
                   <ul style={{ marginTop: 18, paddingLeft: 18 }}>
                     {datos.historial.map((h, i) => (
                       <li key={i}>
-                        <strong>{formatearEstado(h.estado)}</strong> — {formatearFecha(h.fecha_hora)}
+                        <strong>{NOMBRE_ESTADO[h.estado]}</strong> — {formatearFecha(h.fecha_hora)}
                       </li>
                     ))}
                   </ul>
