@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Inferior";
 import { Eyebrow } from "@/components/site/Icon";
+import { BuscadorGuia } from "@/components/site/BuscadorGuia";
 import { ApiError, consultarSeguimiento, type Seguimiento } from "@/lib/api";
 
 export const Route = createFileRoute("/seguimiento")({
@@ -35,6 +36,8 @@ function SeguimientoPage() {
   const [datos, setDatos] = useState<Seguimiento | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Sube en cada búsqueda: permite reintentar la misma guía (p. ej. si falló la conexión).
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     if (!guia) return;
@@ -62,7 +65,7 @@ function SeguimientoPage() {
     return () => {
       cancelado = true;
     };
-  }, [guia]);
+  }, [guia, intento]);
 
   return (
     <div className="site">
@@ -72,12 +75,9 @@ function SeguimientoPage() {
           <div className="container">
             <Eyebrow>Seguimiento</Eyebrow>
             <h1 className="h2 big">Estado de tu envío.</h1>
-            {guia ? (
-              <p className="lead">Guía consultada: <strong>{guia}</strong></p>
-            ) : (
-              <p className="lead">No ingresaste un número de guía. Podés consultar nuevamente desde la página principal.</p>
-            )}
+            {guia && <p className="lead">Guía consultada: <strong>{guia}</strong></p>}
             <div className="form" style={{ marginTop: 32 }}>
+              {!guia && <p className="fsub">Ingresá el número de guía para consultar tu envío.</p>}
               {cargando && <p className="fsub">Consultando el estado de tu envío...</p>}
               {error && <p className="fsub">{error}</p>}
               {datos && (
@@ -92,7 +92,12 @@ function SeguimientoPage() {
                   </ul>
                 </>
               )}
-              <Link to="/" className="btn btn-primary" style={{ display: "inline-block", marginTop: 18 }}>Volver al inicio</Link>
+            </div>
+            {/* HU-21: si no se encontró, se puede reintentar acá mismo con otro código */}
+            <div style={{ marginTop: 32, maxWidth: 480 }}>
+              <BuscadorGuia key={guia} inicial={guia} onBuscar={() => setIntento((n) => n + 1)}>
+                <h3>Consultar otra guía</h3>
+              </BuscadorGuia>
             </div>
           </div>
         </section>

@@ -1,8 +1,6 @@
 import { Icon } from "./Icon";
 import { nav } from "./data";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
 
 export function Logo() {
   return (
@@ -23,9 +21,10 @@ export function Header({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
       <div className="navbar">
-        <div className="logo-wrap"><Logo /></div>
+        {/* El logo lleva al inicio desde cualquier página, como en cualquier sitio web */}
+        <div className="logo-wrap"><Link to="/" aria-label="Ir al inicio"><Logo /></Link></div>
         <div className="container nav-in">
-          {compact ? <Button asChild className="btn btn-white return-home"><Link to="/"><ArrowLeft />Volver al Inicio</Link></Button> : <><nav className="nav">
+          {!compact && <><nav className="nav">
             {nav.map((n) => <a key={n.t} href={n.href}>{n.t}</a>)}
             <a href="#contacto" className="nav-cta">Contacto</a>
           </nav>

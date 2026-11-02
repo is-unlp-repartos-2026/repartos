@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ApiError, getSesionOperario, getSesionRepartidor, listarRepartidores, loginOperario, loginRepartidor, registrarRepartidor as registrarRepartidorApi,
   tokenOperario, tokenRepartidor, type Repartidor,
@@ -12,6 +13,7 @@ import {
   type DemoMessage, type DriverToken, type Shipment, type ShipmentInput,
 } from "@/lib/shipment-demo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import type { SeccionOperario } from "@/routes/operario";
 
 
 
@@ -31,6 +33,22 @@ function useChannel(onMessage: (m: DemoMessage) => void) {
     return () => { ch.close(); ref.current = null; };
   }, []);
   return (m: DemoMessage) => ref.current?.postMessage(m);
+}
+
+// Solo un 401/403 significa que la sesión ya no vale (venció, código revocado o repartidor deshabilitado).
+// Si el error es de conexión, la sesión se conserva: el repartidor puede estar sin señal en la calle.
+const sesionInvalida = (err: unknown) => err instanceof ApiError && (err.status === 401 || err.status === 403);
+
+// El código de acceso tiene 4 letras y números: lo demás se descarta mientras se escribe.
+const LARGO_CODIGO_ACCESO = 4;
+const limpiarCodigo = (valor: string) => valor.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, LARGO_CODIGO_ACCESO);
+
+// Pantalla que se ve si no se pudo verificar la sesión guardada porque el backend no responde.
+function SinConexion({ mensaje, onReintentar }: { mensaje: string; onReintentar: () => void }) {
+  return <div className="form staff-login">
+    <p className="staff-error" role="alert">{mensaje}</p>
+    <Button className="btn btn-primary staff-submit" onClick={onReintentar}>Reintentar</Button>
+  </div>;
 }
 
 export function StaffPortal({ role }: { role: "repartidor" | "operario" }) {
@@ -55,6 +73,9 @@ function DriverPortal() {
   const [repartidor, setRepartidor] = useState<Repartidor | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [sinConexion, setSinConexion] = useState(false);
   
   // Mantenemos el estado de pedidos temporalmente (aunque quedará vacío hasta integrar la API de pedidos)
   const [state, setState] = useState<{ shipments: Shipment[] } | null>(null);
@@ -63,27 +84,28 @@ function DriverPortal() {
 
   const post = useChannel((m) => { if (m.type === "sync") setState({ shipments: m.shipments }); });
 
-  // HU-34: Cargar sesión guardada al abrir la aplicación
-  useEffect(() => {
+  // HU-02: al abrir la app, si hay una sesión guardada en el celular, entra directo.
+  function verificarSesion() {
     const tokenGuardado = tokenRepartidor.leer();
-    if (tokenGuardado) {
-      setPending(true);
-      getSesionRepartidor(tokenGuardado)
-        .then((perfil) => setRepartidor(perfil))
-        .catch((err: Error) => {
-          tokenRepartidor.borrar();
-          setError(err.message);
-        })
-        .finally(() => setPending(false));
-    }
-  }, []);
+    if (!tokenGuardado) { setVerificandoSesion(false); return; }
+    setVerificandoSesion(true);
+    setSinConexion(false);
+    getSesionRepartidor(tokenGuardado)
+      .then((perfil) => setRepartidor(perfil))
+      .catch((err: Error) => {
+        if (sesionInvalida(err)) tokenRepartidor.borrar(); // p. ej. lo deshabilitaron: vuelve al ingreso
+        else setSinConexion(true);
+        setError(err.message);
+      })
+      .finally(() => setVerificandoSesion(false));
+  }
+
+  useEffect(verificarSesion, []);
 
   async function login(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const codigo = new FormData(e.currentTarget).get("token")?.toString().toUpperCase() ?? "";
-    if (codigo.length !== 4) { setError("El código debe tener 4 caracteres."); return; }
-    
-    setPending(true);
+    if (codigo.length !== LARGO_CODIGO_ACCESO) return;
+setPending(true);
     setError("");
     
     try {
@@ -102,6 +124,7 @@ function DriverPortal() {
   function logout() {
     tokenRepartidor.borrar();
     setRepartidor(null);
+    setCodigo("");
   }
 
   // Al usar el backend real, el ID será un número entero. 
@@ -114,16 +137,20 @@ function DriverPortal() {
   
   return (
     <Shell role="Repartidor" title={repartidor ? `Mis entregas - ${repartidor.nombre}` : "Acceso de repartidor"} onLogout={repartidor ? logout : undefined}>
-      {!repartidor ? (
+      {verificandoSesion ? (
+        <p className="fsub">Verificando sesión…</p>
+      ) : sinConexion ? (
+        <SinConexion mensaje={error} onReintentar={verificarSesion} />
+      ) : !repartidor ? (
         <form className="form staff-login" onSubmit={login} noValidate>
           <h2>Ingresá tu código</h2>
           <div className="fgrid">
             <label className="full">Código de acceso (4 caracteres)
-              <input name="token" maxLength={4} autoComplete="off" style={{ textTransform: "uppercase", letterSpacing: "0.3em" }} required />
+              <input value={codigo} onChange={(e) => setCodigo(limpiarCodigo(e.target.value))} autoComplete="off" style={{ letterSpacing: "0.3em" }} />
             </label>
           </div>
           {error && <p className="staff-error" role="alert">{error}</p>}
-          <Button className="btn btn-primary staff-submit" type="submit" disabled={pending}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
+          <Button className="btn btn-primary staff-submit" type="submit" disabled={pending || codigo.length !== LARGO_CODIGO_ACCESO}>{pending ? "Verificando…" : "Ingresar"}<ArrowRight /></Button>
         </form>
       ) : (
         <>
@@ -176,7 +203,11 @@ const medidasRepartidor = [
 type BorradorRepartidor = { nombre: string; dni: string; correo: string; peso_max_kg: string; alto_max_cm: string; ancho_max_cm: string; largo_max_cm: string };
 const repartidorVacio: BorradorRepartidor = { nombre: "", dni: "", correo: "", peso_max_kg: "", alto_max_cm: "", ancho_max_cm: "", largo_max_cm: "" };
 
-// Las mismas reglas que el backend, para mostrar el error en castellano antes de enviar.
+// Deja solo dígitos y un único punto decimal (acepta coma y la pasa a punto).
+const soloDecimal = (valor: string) => valor.replace(",", ".").replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+
+// Las mismas reglas que el backend. Devuelve qué falta completar (o null si está todo bien):
+// mientras falte algo, el botón de registrar queda deshabilitado.
 function validarRepartidor(d: BorradorRepartidor): string | null {
   if (!d.nombre.trim()) return "Completá el nombre.";
   if (!/^\d{7,8}$/.test(d.dni)) return "El DNI tiene que tener 7 u 8 números, sin puntos.";
@@ -190,7 +221,11 @@ function validarRepartidor(d: BorradorRepartidor): string | null {
 function OperatorPortal() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [sinConexion, setSinConexion] = useState(false);
   const [error, setError] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [contrasena, setContrasena] = useState("");
+  const [ingresando, setIngresando] = useState(false);
   const [shipments, setShipments] = useState<Shipment[]>(() => demoShipments.map((s) => ({ ...s })));
   const [tokens, setTokens] = useState<DriverToken[]>(demoRepartidoresIniciales);
   const [adding, setAdding] = useState(false);
@@ -205,7 +240,10 @@ function OperatorPortal() {
   
   const [resultadoAltaEnvio, setResultadoAltaEnvio] = useState<{ guia: string, estado: string, aviso?: string } | null>(null);
 
-  const [seccion, setSeccion] = useState<"envios" | "repartidores">("repartidores");
+  // La sección sale de la URL (/operario?seccion=...): el "atrás" del navegador vuelve a la anterior.
+  const seccion: SeccionOperario = useSearch({ from: "/operario" }).seccion ?? "repartidores";
+  const navigate = useNavigate();
+  const setSeccion = (nueva: SeccionOperario) => navigate({ to: "/operario", search: { seccion: nueva } });
   const [filtroHabilitacion, setFiltroHabilitacion] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
 
   const live = useRef({ tokens, shipments, loggedIn });
@@ -270,34 +308,42 @@ function OperatorPortal() {
   }, [tokens, shipments, loggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Al abrir o recargar la página: si hay un token guardado y sigue valiendo, entra directo.
-  useEffect(() => {
+  useEffect(verificarSesion, []);
+
+  function verificarSesion() {
     const tokenGuardado = tokenOperario.leer();
     if (!tokenGuardado) { setVerificandoSesion(false); return; }
+    setVerificandoSesion(true);
+    setSinConexion(false);
     getSesionOperario(tokenGuardado)
       .then(() => setLoggedIn(true))
-      .catch(() => tokenOperario.borrar()) // venció (30 min) o no es válido: vuelve al ingreso
+      .catch((err: Error) => {
+        if (sesionInvalida(err)) tokenOperario.borrar(); // venció (30 min): vuelve al ingreso
+        else { setSinConexion(true); setError(err.message); }
+      })
       .finally(() => setVerificandoSesion(false));
-  }, []);
-
-async function login(e: FormEvent<HTMLFormElement>) {
-  e.preventDefault();
-  const form = e.currentTarget;
-  const f = new FormData(form);
-
-  try {
-    const response = await loginOperario(String(f.get("usuario")), String(f.get("password")));
-    tokenOperario.guardar(response.token);
-    setError("");
-    form.reset();
-    setLoggedIn(true);
-  } catch (err) {
-    setError(
-      err instanceof ApiError && err.status === 401
-        ? "Usuario o contraseña incorrectos."
-        : "No se pudo conectar con el servidor. Intentá de nuevo."
-    );
   }
-}
+
+  // El botón queda deshabilitado hasta completar los dos campos (y mientras espera la respuesta).
+  const puedeIngresar = usuario.trim() !== "" && contrasena !== "" && !ingresando;
+
+  async function login(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!puedeIngresar) return;
+    setIngresando(true);
+    try {
+      const response = await loginOperario(usuario.trim(), contrasena);
+      tokenOperario.guardar(response.token);
+      setError("");
+      setUsuario(""); setContrasena("");
+      setLoggedIn(true);
+    } catch (err) {
+      // 401 → "Usuario o contraseña incorrectos" (lo manda el backend); sin conexión → el aviso de api.ts
+      setError((err as Error).message);
+    } finally {
+      setIngresando(false);
+    }
+  }
 
   // Si el backend responde 401 (sesión vencida), se vuelve al ingreso con un aviso.
   function manejarErrorDeSesion(err: unknown): string {
@@ -391,6 +437,8 @@ async function registrarRepartidor(e: FormEvent) {
     return d ? `${d.token} · ${d.nombre}` : "Sin asignar";
   };
 
+  const faltaEnAlta = validarRepartidor(driverDraft);
+
   const repartidoresFiltrados = repartidores.filter((rep) => {
     if (filtroHabilitacion === "habilitados") return rep.habilitado;
     if (filtroHabilitacion === "deshabilitados") return !rep.habilitado;
@@ -401,17 +449,21 @@ async function registrarRepartidor(e: FormEvent) {
     return <Shell role="Operario" title="Acceso de personal"><p className="fsub">Verificando sesión…</p></Shell>;
   }
 
+  if (sinConexion) {
+    return <Shell role="Operario" title="Acceso de personal"><SinConexion mensaje={error} onReintentar={verificarSesion} /></Shell>;
+  }
+
   if (!loggedIn) {
     return (
       <Shell role="Operario" title="Acceso de personal">
         <form className="form staff-login" onSubmit={login} noValidate>
           <h2>Ingresar como operario</h2>
           <div className="fgrid">
-            <label className="full">Usuario<input name="usuario" autoComplete="username" maxLength={100} required /></label>
-            <label className="full">Contraseña<input name="password" type="password" autoComplete="current-password" maxLength={128} required /></label>
+            <label className="full">Usuario<input value={usuario} onChange={(e) => setUsuario(e.target.value)} autoComplete="username" maxLength={100} /></label>
+            <label className="full">Contraseña<input value={contrasena} onChange={(e) => setContrasena(e.target.value)} type="password" autoComplete="current-password" maxLength={128} /></label>
           </div>
           {error && <p className="staff-error" role="alert">{error}</p>}
-          <Button className="btn btn-primary staff-submit" type="submit">Ingresar<ArrowRight /></Button>
+          <Button className="btn btn-primary staff-submit" type="submit" disabled={!puedeIngresar}>{ingresando ? "Ingresando…" : "Ingresar"}<ArrowRight /></Button>
         </form>
       </Shell>
     );
@@ -429,18 +481,20 @@ async function registrarRepartidor(e: FormEvent) {
           <div className="form shipment-create" style={{ padding: 24, marginBottom: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 20, fontSize: 18 }}>Alta de nuevo repartidor</h3>
             <form className="fgrid" onSubmit={registrarRepartidor} noValidate>
-              <label className="full">Nombre<input value={driverDraft.nombre} onChange={(e) => setDriverDraft(v => ({ ...v, nombre: e.target.value }))} required /></label>
+              <label className="full">Nombre<input value={driverDraft.nombre} maxLength={100} onChange={(e) => setDriverDraft(v => ({ ...v, nombre: e.target.value }))} /></label>
               {/* Solo números: se borra cualquier otra cosa que se tipee */}
-              <label>DNI (sin puntos)<input inputMode="numeric" maxLength={8} value={driverDraft.dni} onChange={(e) => setDriverDraft(v => ({ ...v, dni: e.target.value.replace(/\D/g, "") }))} required /></label>
-              <label>Correo electrónico<input type="email" value={driverDraft.correo} onChange={(e) => setDriverDraft(v => ({ ...v, correo: e.target.value }))} required /></label>
+              <label>DNI (sin puntos)<input inputMode="numeric" maxLength={8} value={driverDraft.dni} onChange={(e) => setDriverDraft(v => ({ ...v, dni: e.target.value.replace(/\D/g, "") }))} /></label>
+              <label>Correo electrónico<input type="email" value={driverDraft.correo} maxLength={254} onChange={(e) => setDriverDraft(v => ({ ...v, correo: e.target.value }))} /></label>
 
+              {/* Solo dígitos y un punto decimal: no se puede escribir "-5" ni "1e3" */}
               {medidasRepartidor.map(([campo, etiqueta]) => (
-                <label key={campo}>{etiqueta}<input type="number" step="0.1" min="0" value={driverDraft[campo]} onChange={(e) => setDriverDraft(v => ({ ...v, [campo]: e.target.value }))} required /></label>
+                <label key={campo}>{etiqueta}<input inputMode="decimal" value={driverDraft[campo]} onChange={(e) => setDriverDraft(v => ({ ...v, [campo]: soloDecimal(e.target.value) }))} /></label>
               ))}
-
               {tokenError && <p className="staff-error full" role="alert">{tokenError}</p>}
               <div className="full" style={{ marginTop: 12 }}>
-                <Button type="submit" className="btn btn-primary" disabled={registrando}><KeyRound />{registrando ? "Registrando…" : "Registrar y habilitar acceso"}</Button>
+                {/* Deshabilitado hasta que el formulario sea válido; arriba del botón se indica qué falta */}
+                {faltaEnAlta && <p className="hint" style={{ marginTop: 0 }}>{faltaEnAlta}</p>}
+                <Button type="submit" className="btn btn-primary" disabled={registrando || faltaEnAlta !== null}><KeyRound />{registrando ? "Registrando…" : "Registrar y habilitar acceso"}</Button>
               </div>
             </form>
             {tokenGenerado && (
