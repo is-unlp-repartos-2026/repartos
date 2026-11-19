@@ -1,6 +1,6 @@
 """Schemas de los repartidores."""
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class DatosNuevoRepartidor(BaseModel):
@@ -19,6 +19,16 @@ class DatosNuevoRepartidor(BaseModel):
     alto_max_cm: float = Field(gt=0)
     ancho_max_cm: float = Field(gt=0)
     largo_max_cm: float = Field(gt=0)
+
+    @field_validator("nombre")
+    @classmethod
+    def nombre_sin_numeros(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El nombre no puede estar vacío.")
+        if any(c.isdigit() for c in v):
+            raise ValueError("El nombre no puede contener números.")
+        return v
 
 
 class Habilitacion(BaseModel):
