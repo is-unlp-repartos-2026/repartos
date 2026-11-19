@@ -25,6 +25,7 @@ const VACIO: Borrador = { nombre: "", dni: "", correo: "", peso_max_kg: "", alto
 // Las mismas reglas que el backend. Devuelve qué falta completar, o null si está todo bien.
 function queFalta(d: Borrador): string | null {
   if (!d.nombre.trim()) return "Completá el nombre.";
+  if (/\d/.test(d.nombre)) return "El nombre no puede contener números.";
   if (!dniValido(d.dni)) return "El DNI tiene que tener 7 u 8 números, sin puntos.";
   if (!correoValido(d.correo)) return "Ingresá un correo válido.";
   return validarMedidas(d, MEDIDAS);
